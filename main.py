@@ -1,4 +1,4 @@
-from mystage import run_stage
+from anomalydetection import run_stage
 
 if __name__ == '__main__':
     run_stage()
