@@ -6,11 +6,11 @@ import time
 from prometheus_client import Counter, Histogram, start_http_server
 from visionlib.pipeline.consumer import RedisConsumer
 from visionlib.pipeline.publisher import RedisPublisher
-from anomalydetection.TrajectoryCollector import TimedTrajectories
+from anomalydetection.trajectorycollector import TimedTrajectories
 
 from .config import AnomalyDetectionConfig
 from .anomalydetection import AnomalyDetection
-from anomalydetection import Detector
+from anomalydetection import detector
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def run_stage():
                             stream_keys=[f'{CONFIG.redis.input_stream_prefix}:{CONFIG.redis.stream_id}'])
     publish = RedisPublisher(CONFIG.redis.host, CONFIG.redis.port)
 
-    detector = Detector(CONFIG.path_model_json)
+    detector = detector(CONFIG.path_model_json)
     timed_data_collector = TimedTrajectories(timeout=3)
     
     with consume, publish:
