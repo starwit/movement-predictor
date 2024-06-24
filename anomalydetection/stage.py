@@ -1,13 +1,16 @@
 import logging
 import signal
 import threading
+import time
 
 from prometheus_client import Counter, Histogram, start_http_server
 from visionlib.pipeline.consumer import RedisConsumer
 from visionlib.pipeline.publisher import RedisPublisher
+from anomalydetection.TrajectoryCollector import TimedTrajectories
 
 from .config import AnomalyDetectionConfig
 from .anomalydetection import AnomalyDetection
+from anomalydetection import Detector
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,9 @@ def run_stage():
     consume = RedisConsumer(CONFIG.redis.host, CONFIG.redis.port, 
                             stream_keys=[f'{CONFIG.redis.input_stream_prefix}:{CONFIG.redis.stream_id}'])
     publish = RedisPublisher(CONFIG.redis.host, CONFIG.redis.port)
+
+    detector = Detector(CONFIG.path_model_json)
+    timed_data_collector = TimedTrajectories(timeout=3)
     
     with consume, publish:
         for stream_key, proto_data in consume():
@@ -58,6 +64,7 @@ def run_stage():
             FRAME_COUNTER.inc()
 
             output_proto_data = anomaly_detection.get(proto_data)
+            timed_data_collector.add(output_proto_data)
 
             if output_proto_data is None:
                 continue
@@ -65,3 +72,5 @@ def run_stage():
             with REDIS_PUBLISH_DURATION.time():
                 publish(f'{CONFIG.redis.output_stream_prefix}:{stream_id}', output_proto_data)
             
+            data = timed_data_collector.get_latest_Trajectories()
+            detector.examine(data)

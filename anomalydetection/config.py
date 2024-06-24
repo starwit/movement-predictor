@@ -19,6 +19,7 @@ class AnomalyDetectionConfig(BaseSettings):
     prometheus_port: Annotated[int, Field(ge=1024, le=65536)] = 8000
 
     model_config = SettingsConfigDict(env_nested_delimiter='__')
+    model_path_json = ""
 
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):

@@ -3,7 +3,6 @@ import json
 import torch
 import torch.nn as nn
 import os
-import time
 from AEsAnomalyDetection.RecurrentAE.AE import LSTM_AE
 from AEsAnomalyDetection.RecurrentAE.Validator import plotAnomalTrajectory, plotTrajectory
 from AEsAnomalyDetection.RecurrentAE.Dataset import makeTorchPredictionDataSet
@@ -21,7 +20,6 @@ class Detector():
     def __init__(self, pathModelParameters):
         self.parameters = self.read_json(pathModelParameters)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # import
         self.model = LSTM_AE(self.parameters["dimension_latent_space"]).to(self.device)
 
         try:
@@ -54,33 +52,53 @@ class Detector():
             return None
         
     
-    def examine(self, tracks, frames):
+    def examine(self, tracks, frames=None):
         tracks = DataFilterer().apply_filtering(tracks)  
-        trajectories_dataset = makeTorchPredictionDataSet(tracks) 
-        anomalies = []
-        criterion = nn.L1Loss(reduction='sum').to(self.device)
+        for id in tracks.keys:
+            trajectories_dataset = makeTorchPredictionDataSet({id: tracks[id]}) 
+            anomalies = []
+            criterion = nn.L1Loss(reduction='sum').to(self.device)
 
-        with torch.no_grad():
-            for trajectory in trajectories_dataset:
-                trajectory = trajectory.to(self.device).unsqueeze(0)
-                target = trajectory
-                pred = self.model(target)
-                loss = criterion(pred, target)
-                if loss.item() > self.parameters["anomaly_loss_threshold"]:
-                    anomalies.append(trajectory)
+            with torch.no_grad():
+                for trajectory in zip(trajectories_dataset):
+                    trajectory = trajectory.to(self.device).unsqueeze(0)
+                    target = trajectory
+                    pred = self.model(target)
+                    loss = criterion(pred, target)
+                    if loss.item() > self.parameters["anomaly_loss_threshold"]:
+                        anomalies.append([trajectory, id])
 
+        self.store_in_json(anomalies)
+
+        for batch in trajectories_dataset:
+            plotTrajectory(batch.cpu().numpy(), plotArrows=False)  
         for anomaly in anomalies:
-            for num, batch in enumerate(trajectories_dataset):
-                plotTrajectory(batch.cpu().numpy(), plotArrows=False)  
-                if num > 5000:
-                    break
+            plotAnomalTrajectory(anomaly[0])   
+            
+        path = "/anomalies/anomaly_" + str(datetime.now())
+        os.makedirs(path, exist_ok=True)
+        plt.savefig(path + "/plot.png")
+        plt.close()
 
-            plotAnomalTrajectory(anomaly)   
-            path = "/anomalies/anomaly_" + str(datetime.now())
-            os.makedirs(path, exist_ok=True)
-            plt.savefig(path + "/plot.png")
-            plt.close()
-            storeVideo(anomaly, frames, path) #TODO: implement
+        #storeVideo(anomaly, frames, path) #TODO: implement
         
         return anomalies
     
+
+    def store_in_json(anomalies):
+        new_data = {}
+        for anomal_trajectory, id in anomalies:
+            new_data[id] = anomal_trajectory
+
+        file_path = "/anomalies/anomalies.json"
+
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as json_file:
+                data = json.load(json_file)
+        else:
+            data = {}
+
+        data.update(new_data)
+
+        with open(file_path, 'w') as json_file:
+            json.dump(data, json_file, indent=4)
