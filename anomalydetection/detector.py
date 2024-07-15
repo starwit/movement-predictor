@@ -73,18 +73,22 @@ class Detector():
 
             self.store_in_json(anomalies)
 
-            for batch in trajectories_dataset:
-                plotTrajectory(batch.cpu().numpy(), plotArrows=False)  
-
-        for anomaly in total_anomalies:
-            plotAnomalTrajectory(anomaly[0])   
+        if len(total_anomalies) > 0:
             
-        path = "home/hanna/workspaces/sae-anomaly-detection/anomalies/anomaly_" + str(datetime.now())
-        os.makedirs(path, exist_ok=True)
-        plt.savefig(path + "/plot.png")
-        plt.close()
+            for id in tracks.keys():
+                trajectories_dataset = makeTorchPredictionDataSet({id: tracks[id]})
+                for batch in trajectories_dataset:
+                    plotTrajectory(batch.cpu().numpy(), plotArrows=False)  
 
-        #storeVideo(total_anomalies, frames, path) #TODO: implement
+            for anomaly in total_anomalies:
+                plotAnomalTrajectory(anomaly[0])   
+            
+            path = "/home/hanna/workspaces/sae-anomaly-detection/anomalies/anomaly_" + str(datetime.now())
+            os.makedirs(path, exist_ok=True)
+            plt.savefig(path + "/plot.png")
+            plt.close()
+
+            #storeVideo(total_anomalies, frames, path) #TODO: implement
         
         return total_anomalies
     
