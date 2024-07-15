@@ -10,7 +10,7 @@ from anomalydetection.trajectorycollector import TimedTrajectories
 
 from .config import AnomalyDetectionConfig
 from .anomalydetection import AnomalyDetection
-from anomalydetection import detector
+from anomalydetection.detector import Detector
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def run_stage():
                             stream_keys=[f'{CONFIG.redis.input_stream_prefix}:{CONFIG.redis.stream_id}'])
     publish = RedisPublisher(CONFIG.redis.host, CONFIG.redis.port)
 
-    detector = detector(CONFIG.path_model_json)
+    detector = Detector(CONFIG.model_path_json)
     timed_data_collector = TimedTrajectories(timeout=3)
     
     with consume, publish:
@@ -65,6 +65,7 @@ def run_stage():
 
             output_proto_data = anomaly_detection.get(proto_data)
             timed_data_collector.add(output_proto_data)
+            output_proto_data = anomaly_detection._pack_proto(output_proto_data)
 
             if output_proto_data is None:
                 continue

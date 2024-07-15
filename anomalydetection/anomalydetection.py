@@ -30,8 +30,8 @@ class AnomalyDetection:
 
         # Your implementation goes (mostly) here
         logger.warning('Received SAE message from pipeline')
-
-        return self._pack_proto(sae_msg)
+        return sae_msg
+        #return self._pack_proto(sae_msg)
         
     @PROTO_DESERIALIZATION_DURATION.time()
     def _unpack_proto(self, sae_message_bytes):

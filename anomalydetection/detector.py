@@ -25,7 +25,7 @@ class Detector():
         try:
             weights = torch.load(self.parameters["path_to_model"], map_location=torch.device(self.device))
         except:
-            log.error(f"Model weights not found at {self.parameters["path_to_model"]}")
+            log.error(f"Model weights not found at {self.parameters['path_to_model']}")
             exit(1)
         try:    
             self.model.load_state_dict(weights)
@@ -34,7 +34,7 @@ class Detector():
             exit(1)
 
         log.info("starting anomaly detection with parameters:")
-        for key in self.parameters.keyset():
+        for key in self.parameters.keys():
             log.info(key + ": " + str(self.parameters[key]))
 
 
@@ -53,11 +53,14 @@ class Detector():
         
     
     def examine(self, tracks, frames=None):
+        tracks = [item for sublist in tracks for item in sublist] # flatten tracks list
         tracks = DataFilterer().apply_filtering(tracks)  
-        for id in tracks.keys:
-            trajectories_dataset = makeTorchPredictionDataSet({id: tracks[id]}) 
-            anomalies = []
-            criterion = nn.L1Loss(reduction='sum').to(self.device)
+        criterion = nn.L1Loss(reduction='sum').to(self.device)
+        total_anomalies = []
+
+        for id in tracks.keys():
+            anomalies=[] 
+            trajectories_dataset = makeTorchPredictionDataSet({id: tracks[id]})
 
             with torch.no_grad():
                 for trajectory in zip(trajectories_dataset):
@@ -68,21 +71,22 @@ class Detector():
                     if loss.item() > self.parameters["anomaly_loss_threshold"]:
                         anomalies.append([trajectory, id])
 
-        self.store_in_json(anomalies)
+            self.store_in_json(anomalies)
 
-        for batch in trajectories_dataset:
-            plotTrajectory(batch.cpu().numpy(), plotArrows=False)  
-        for anomaly in anomalies:
+            for batch in trajectories_dataset:
+                plotTrajectory(batch.cpu().numpy(), plotArrows=False)  
+
+        for anomaly in total_anomalies:
             plotAnomalTrajectory(anomaly[0])   
             
-        path = "/anomalies/anomaly_" + str(datetime.now())
+        path = "home/hanna/workspaces/sae-anomaly-detection/anomalies/anomaly_" + str(datetime.now())
         os.makedirs(path, exist_ok=True)
         plt.savefig(path + "/plot.png")
         plt.close()
 
-        #storeVideo(anomaly, frames, path) #TODO: implement
+        #storeVideo(total_anomalies, frames, path) #TODO: implement
         
-        return anomalies
+        return total_anomalies
     
 
     def store_in_json(anomalies):

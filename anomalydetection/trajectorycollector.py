@@ -12,13 +12,14 @@ class TimedTrajectories:
     def __init__(self, timeout):
         self.timeout = timeout
         self.data = {}
-        self.first_timestamps = {}
-        self.second_timestamps = {}
+        self.timestamps = {}
         self.out = []
 
     def add(self, proto):
         current_time = time.time()
 
+        #with open("output.txt", "w") as file:
+         #   print(proto, file=file)
         frame = proto.frame
         last_tracks = []
 
@@ -46,13 +47,13 @@ class TimedTrajectories:
             center = ((min_x + max_x) * 0.5, (min_y + max_y) * 0.5 * scale)
 
             tracked_object_pos = TrackedObjectPosition()
-            tracked_object_pos.set_capture_ts(frame.getTimestampUtcMs())
-            tracked_object_pos.set_uuid(det.getObjectId())
-            tracked_object_pos.set_class_id(det.getClassId())
+            tracked_object_pos.set_capture_ts(frame.timestamp_utc_ms)
+            tracked_object_pos.set_uuid(det.object_id)
+            tracked_object_pos.set_class_id(det.class_id)
             tracked_object_pos.set_center(center)
-            print(tracked_object_pos.get_capture_ts())
-            print(tracked_object_pos.get_center())
-            print(tracked_object_pos.get_uuid())
+            #print(tracked_object_pos.get_capture_ts())
+            #print(tracked_object_pos.get_center())
+            #print(tracked_object_pos.get_uuid())
 
             last_tracks.append(tracked_object_pos)
 
@@ -63,29 +64,35 @@ class TimedTrajectories:
             if id not in self.data:
                 self.data[id] = []
             self.data[id].append(track)
-            if not id in self.first_timestamps.keys:
-                self.first_timestamps[id] = current_time
-            self.second_timestamps[id] = current_time
+            if not id in self.timestamps.keys():
+                self.timestamps[id] = [current_time, current_time]      # first entry: first seen, second entry: last_seen
+            else:
+                self.timestamps[id][1] = current_time
             self._check_time()
 
     def _check_time(self):
         ready = []
-        for id in self.first_timestamps.keys:
-            time_diff = self.second_timestamps[id] - self.first_timestamps[id]
+        for id in self.timestamps.keys():
+            time_diff = self.timestamps[id][1] - self.timestamps[id][0]
             if time_diff > 4:
                 ready.append(self.data[id])
-                self.first_timestamps[id] = self.second_timestamps - 1
+                self.timestamps[id][0] +=  1
                 new_data = []
                 for track in self.data[id]:
-                    if track.get_capture_ts() > self.first_timestamps[id]:
+                    if track.get_capture_ts() > self.timestamps[id][0]:
                         new_data.append(track)
                 self.data[id] = new_data
 
         current_time = time.time()
-        expired_keys = [id for id, timestamp in self.second_timestamps.items() if current_time - timestamp >= self.timeout]
+        expired_keys = [id for id, [_, ts2] in self.timestamps.items() if current_time - ts2 >= self.timeout]
         for id in expired_keys:
-            self.second_timestamps.pop(id)        
+            self.timestamps.pop(id)        
             self.data.pop(id)
+        
+        #print(self.out)
+        #print(ready)
+        self.out = self.out + ready
+        #print(self.out)
 
 
     def get_latest_Trajectories(self):
