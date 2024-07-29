@@ -102,8 +102,8 @@ class Detector():
                         print("anomaly found")
                         anomalies.append([trajectory, id])
 
-            if len(anomalies) != 0:
-                Detector.store_in_json(anomalies)
+            #if len(anomalies) != 0:
+             #   Detector.store_in_json(anomalies)
 
             total_anomalies += anomalies
 
@@ -121,26 +121,28 @@ class Detector():
             os.makedirs(path, exist_ok=True)
             plt.savefig(path + "/plot.png")
             plt.close()
+            Detector.store_in_json(total_anomalies, path)
 
             #storeVideo(total_anomalies, frames, path) #TODO: implement
         
         return total_anomalies
     
 
-    def store_in_json(anomalies):
+    def store_in_json(anomalies, path):
         new_data = {}
+        for _, id in anomalies:
+            new_data[str(id)] = [] 
         for anomal_trajectory, id in anomalies:
-            new_data[str(id)] = anomal_trajectory.tolist()
+            new_data[str(id)].append(anomal_trajectory.tolist())
 
-        file_path = "anomalies/anomalies.json"
+        file_path = path + "/anomal_trajectories.json"
 
-        if os.path.exists(file_path):
-            with open(file_path, 'r') as json_file:
-                data = json.load(json_file)
-        else:
-            data = {}
-
-        data.update(new_data)
+        #if os.path.exists(file_path):
+         #   with open(file_path, 'r') as json_file:
+          #      data = json.load(json_file)
+        #else:
+        #data = {}
+        #data.update(new_data)
 
         with open(file_path, 'w') as json_file:
-            json.dump(data, json_file, indent=4)
+            json.dump(new_data, json_file, indent=4)
