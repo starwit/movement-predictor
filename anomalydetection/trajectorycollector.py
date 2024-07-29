@@ -1,7 +1,6 @@
 import time
-import queue
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from AEsAnomalyDetection.TrackedObjectPosition import TrackedObjectPosition
 
 
@@ -43,11 +42,15 @@ class TimedTrajectories:
                 border_box_count += 1
                 continue
 
-            scale = frame.shape.height / frame.shape.width
-            center = ((min_x + max_x) * 0.5, (min_y + max_y) * 0.5 * scale)
+            #scale = frame.shape.height / frame.shape.width
+            #print(scale)
+            center = ((min_x + max_x) * 0.5, (min_y + max_y) * 0.5) #* scale)
+            #print(center)
 
             tracked_object_pos = TrackedObjectPosition()
-            tracked_object_pos.set_capture_ts(frame.timestamp_utc_ms)
+            #tracked_object_pos.set_capture_ts(frame.timestamp_utc_ms)
+            datetime_obj = datetime.fromtimestamp(frame.timestamp_utc_ms/1_000, tz=timezone.utc)
+            tracked_object_pos.set_capture_ts(datetime_obj)
             tracked_object_pos.set_uuid(det.object_id)
             tracked_object_pos.set_class_id(det.class_id)
             tracked_object_pos.set_center(center)
@@ -74,12 +77,12 @@ class TimedTrajectories:
         ready = []
         for id in self.timestamps.keys():
             time_diff = self.timestamps[id][1] - self.timestamps[id][0]
-            if time_diff > 4:
+            if time_diff > 10:
                 ready.append(self.data[id])
                 self.timestamps[id][0] +=  1
                 new_data = []
                 for track in self.data[id]:
-                    if track.get_capture_ts() > self.timestamps[id][0]:
+                    if track.get_capture_ts().timestamp() > self.timestamps[id][0]:
                         new_data.append(track)
                 self.data[id] = new_data
 

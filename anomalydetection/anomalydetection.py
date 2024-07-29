@@ -20,7 +20,7 @@ class AnomalyDetection:
     def __init__(self, config: AnomalyDetectionConfig) -> None:
         self.config = config
         logger.setLevel(self.config.log_level.value)
-
+ 
     def __call__(self, input_proto) -> Any:
         return self.get(input_proto)
     
@@ -29,7 +29,7 @@ class AnomalyDetection:
         sae_msg = self._unpack_proto(input_proto)
 
         # Your implementation goes (mostly) here
-        logger.warning('Received SAE message from pipeline')
+        #logger.warning('Received SAE message from pipeline')
         return sae_msg
         #return self._pack_proto(sae_msg)
         
