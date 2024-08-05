@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import os
 import sys
+import anomalydetection.videogeneration
 from AEsAnomalyDetection.RecurrentAE.AE import LSTM_AE
 from AEsAnomalyDetection.RecurrentAE.Validator import plotAnomalTrajectory, plotTrajectory
 from AEsAnomalyDetection.RecurrentAE.Dataset import makeTorchPredictionDataSet
@@ -14,6 +15,7 @@ from datetime import datetime
 
 
 log = logging.getLogger(__name__)
+
 
 class SuppressOutput:
     def __enter__(self):
@@ -29,14 +31,14 @@ class SuppressOutput:
         sys.stderr = self._stderr
 
 
-
 class Detector():
 
-    def __init__(self, pathModelParameters):
+    def __init__(self, pathModelParameters, whole_video):
         print(pathModelParameters)
         self.parameters = Detector.read_json(pathModelParameters)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = LSTM_AE(self.parameters["dimension_latent_space"]).to(self.device)
+        self.whole_video = whole_video
 
         try:
             weights = torch.load(self.parameters["path_to_model"], map_location=torch.device(self.device))
@@ -68,9 +70,9 @@ class Detector():
             return None
         
     
-    def examine(self, tracks, frames=None):
+    def examine(self, tracks, frames):
         tracks = [item for sublist in tracks for item in sublist] # flatten tracks list
-        print("num tracks before filtering: ", len(tracks))
+        log.info("num tracks before filtering: ", len(tracks))
 
         #mapping = {}
         #for track in tracks:
@@ -81,7 +83,7 @@ class Detector():
         #tracks = mapping
 
         tracks = DataFilterer().apply_filtering(tracks)  
-        print("num tracks after filtering: ", len(tracks))
+        log.info("num tracks after filtering: ", len(tracks))
         criterion = nn.L1Loss(reduction='sum').to(self.device)
         total_anomalies = []
 
@@ -102,9 +104,6 @@ class Detector():
                         print("anomaly found")
                         anomalies.append([trajectory, id])
 
-            #if len(anomalies) != 0:
-             #   Detector.store_in_json(anomalies)
-
             total_anomalies += anomalies
 
         if len(total_anomalies) > 0:
@@ -123,7 +122,10 @@ class Detector():
             plt.close()
             Detector.store_in_json(total_anomalies, path)
 
-            #storeVideo(total_anomalies, frames, path) #TODO: implement
+            if self.whole_video:
+                anomalydetection.videogeneration.storeVideo(frames, path, tracks, total_anomalies) 
+            else:
+                anomalydetection.videogeneration.store_frames(frames, path, tracks, total_anomalies)
         
         return total_anomalies
     

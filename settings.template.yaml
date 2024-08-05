@@ -7,3 +7,4 @@ redis:
   output_stream_prefix: anomalydetection
 prometheus_port: 8000
 path_to_model_config: /home/hanna/workspaces/AETrajectories/AEsAnomalyDetection/RecurrentAE/parameters.json
+whole_video: False

@@ -13,6 +13,7 @@ class TimedTrajectories:
         self.data = {}
         self.timestamps = {}
         self.out = []
+        self.frames = []
 
     def add(self, proto):
         current_time = time.time()
@@ -20,6 +21,7 @@ class TimedTrajectories:
         #with open("output.txt", "w") as file:
          #   print(proto, file=file)
         frame = proto.frame
+        self.frames.append(frame)
         last_tracks = []
 
         border_box_count = 0
@@ -74,6 +76,7 @@ class TimedTrajectories:
             self._check_time()
 
     def _check_time(self):
+        self.delete_frames_in_past()
         ready = []
         for id in self.timestamps.keys():
             time_diff = self.timestamps[id][1] - self.timestamps[id][0]
@@ -92,10 +95,15 @@ class TimedTrajectories:
             self.timestamps.pop(id)        
             self.data.pop(id)
         
-        #print(self.out)
-        #print(ready)
         self.out = self.out + ready
-        #print(self.out)
+
+    
+    def delete_frames_in_past(self):
+        min_timestamp_in_past = min([ts[0] for _, ts in self.timestamps.items()])
+        for i, frame in enumerate(self.frames):
+            if frame.timestamp_utc_ms/1_000 >= min_timestamp_in_past - 5:
+                self.frames = self.frames[i:]
+                break
 
 
     def get_latest_Trajectories(self):
