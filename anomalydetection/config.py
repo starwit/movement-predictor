@@ -14,7 +14,7 @@ class RedisConfig(BaseModel):
     output_stream_prefix: str = 'anomalydetection'
 
 class AnomalyDetectionConfig(BaseSettings):
-    log_level: LogLevel = LogLevel.WARNING
+    log_level: LogLevel = LogLevel.INFO
     redis: RedisConfig = RedisConfig()
     prometheus_port: Annotated[int, Field(ge=1024, le=65536)] = 8000
     model_config = SettingsConfigDict(env_nested_delimiter='__')

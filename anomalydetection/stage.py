@@ -51,8 +51,8 @@ def run_stage():
                             stream_keys=[f'{CONFIG.redis.input_stream_prefix}:{CONFIG.redis.stream_id}'])
     publish = RedisPublisher(CONFIG.redis.host, CONFIG.redis.port)
 
-    detector = Detector(CONFIG.path_to_model_config, CONFIG.whole_video)
-    timed_data_collector = TimedTrajectories(timeout=3)
+    detector = Detector(CONFIG)
+    timed_data_collector = TimedTrajectories(CONFIG.log_level.value, timeout=3)
     
     with consume, publish:
         for stream_key, proto_data in consume():

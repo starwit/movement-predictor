@@ -16,7 +16,8 @@ from zlib import crc32
 log = logging.getLogger(__name__)
 
 
-def storeVideo(frames, path, tracks, anomalies):
+def storeVideo(frames, path, tracks, anomalies, log_level):
+    log.setLevel(log_level)
     seconds_passed = (frames[-1].timestamp_utc_ms - frames[0].timestamp_utc_ms)/1_000
     framerate = len(frames) / seconds_passed
     ffmpeg_command = [
@@ -96,7 +97,8 @@ def draw_trajectories_in_frame(frame, tracks):
     return encoded_img.tobytes()
 
 
-def store_frames(frames, path, tracks, anomalies):
+def store_frames(frames, path, tracks, anomalies, log_level):
+    log.setLevel(log_level)
     seconds_passed = (frames[-1].timestamp_utc_ms - frames[0].timestamp_utc_ms)/1_000
     framerate = len(frames) / seconds_passed
 

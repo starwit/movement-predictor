@@ -33,12 +33,12 @@ class SuppressOutput:
 
 class Detector():
 
-    def __init__(self, pathModelParameters, whole_video):
-        print(pathModelParameters)
-        self.parameters = Detector.read_json(pathModelParameters)
+    def __init__(self, CONFIG):
+        log.setLevel(CONFIG.log_level.value)
+        self.parameters = Detector.read_json(CONFIG.path_to_model_config)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = LSTM_AE(self.parameters["dimension_latent_space"]).to(self.device)
-        self.whole_video = whole_video
+        self.whole_video = CONFIG.whole_video
 
         try:
             weights = torch.load(self.parameters["path_to_model"], map_location=torch.device(self.device))
@@ -72,8 +72,9 @@ class Detector():
     
     def examine(self, tracks, frames):
         tracks = [item for sublist in tracks for item in sublist] # flatten tracks list
-        log.info("num tracks before filtering: ", len(tracks))
+        log.info(f"num tracks before filtering: {len(tracks)}")
 
+        # TESTING WITHOUT FILTERING
         #mapping = {}
         #for track in tracks:
         #    key = track.uuid
@@ -83,7 +84,7 @@ class Detector():
         #tracks = mapping
 
         tracks = DataFilterer().apply_filtering(tracks)  
-        log.info("num tracks after filtering: ", len(tracks))
+        log.info(f"num tracks after filtering: {len(tracks)}")
         criterion = nn.L1Loss(reduction='sum').to(self.device)
         total_anomalies = []
 
@@ -101,7 +102,7 @@ class Detector():
                     pred = self.model(target)
                     loss = criterion(pred, target)
                     if loss.item() > self.parameters["anomaly_loss_threshold"]:
-                        print("anomaly found")
+                        log.info("anomaly found")
                         anomalies.append([trajectory, id])
 
             total_anomalies += anomalies
@@ -123,9 +124,9 @@ class Detector():
             Detector.store_in_json(total_anomalies, path)
 
             if self.whole_video:
-                anomalydetection.videogeneration.storeVideo(frames, path, tracks, total_anomalies) 
+                anomalydetection.videogeneration.storeVideo(frames, path, tracks, total_anomalies, log.level) 
             else:
-                anomalydetection.videogeneration.store_frames(frames, path, tracks, total_anomalies)
+                anomalydetection.videogeneration.store_frames(frames, path, tracks, total_anomalies, log.level)
         
         return total_anomalies
     

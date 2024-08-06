@@ -4,11 +4,11 @@ from datetime import datetime, timezone
 from AEsAnomalyDetection.TrackedObjectPosition import TrackedObjectPosition
 
 
-log = logging.getLogger(__name__)
-
 
 class TimedTrajectories:
-    def __init__(self, timeout):
+    def __init__(self, log_level, timeout=3):
+        self.log = logging.getLogger(__name__)
+        self.log.setLevel(log_level)
         self.timeout = timeout
         self.data = {}
         self.timestamps = {}
@@ -44,25 +44,18 @@ class TimedTrajectories:
                 border_box_count += 1
                 continue
 
-            #scale = frame.shape.height / frame.shape.width
-            #print(scale)
-            center = ((min_x + max_x) * 0.5, (min_y + max_y) * 0.5) #* scale)
-            #print(center)
+            center = ((min_x + max_x) * 0.5, (min_y + max_y) * 0.5) 
 
             tracked_object_pos = TrackedObjectPosition()
-            #tracked_object_pos.set_capture_ts(frame.timestamp_utc_ms)
             datetime_obj = datetime.fromtimestamp(frame.timestamp_utc_ms/1_000, tz=timezone.utc)
             tracked_object_pos.set_capture_ts(datetime_obj)
             tracked_object_pos.set_uuid(det.object_id)
             tracked_object_pos.set_class_id(det.class_id)
             tracked_object_pos.set_center(center)
-            #print(tracked_object_pos.get_capture_ts())
-            #print(tracked_object_pos.get_center())
-            #print(tracked_object_pos.get_uuid())
 
             last_tracks.append(tracked_object_pos)
 
-        log.debug(f"Removed {border_box_count} detections on frame border.")
+        self.log.debug(f"Removed {border_box_count} detections on frame border.")
 
         for track in last_tracks:
             id = track.get_uuid()
