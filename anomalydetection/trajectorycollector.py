@@ -17,9 +17,6 @@ class TimedTrajectories:
 
     def add(self, proto):
         current_time = time.time()
-
-        #with open("output.txt", "w") as file:
-         #   print(proto, file=file)
         frame = proto.frame
         self.frames.append(frame)
         last_tracks = []
