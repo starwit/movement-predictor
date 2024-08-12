@@ -21,7 +21,6 @@ RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
 # Copy the rest of the project
 COPY . /code/
 
-WORKDIR /code
 ENV PATH="/code/.venv/bin:$PATH"
 RUN python test.py
 
