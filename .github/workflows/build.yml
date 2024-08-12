@@ -15,15 +15,10 @@ jobs:
     - name: checkout
       uses: actions/checkout@v4
 
-    - name: Show GitHub context   
-      env: 
-        GITHUB_ACTOR: ${{ github.actor }}   
-      run: echo "$GITHUB_CONTEXT"
-
     - name: build docker
       env:
-        GITHUB_ACTOR: ${{ github.actor }}
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_USER: ${{ github.actor }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GIT_CREDENTIALS: https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com
       run: |
         docker build --secret id=GIT_CREDENTIALS -t starwitorg/sae-anomaly-detection:latest .
