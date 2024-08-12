@@ -26,4 +26,4 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GIT_CREDENTIALS: https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com
       run: |
-        docker build --secret id=$GIT_CREDENTIALS -t starwitorg/sae-anomaly-detection:latest .
+        docker build --secret id=GIT_CREDENTIALS -t starwitorg/sae-anomaly-detection:latest .
