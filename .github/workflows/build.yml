@@ -15,7 +15,7 @@ jobs:
     - name: checkout
       uses: actions/checkout@v4
 
-    - run: echo "GIT_CREDENTIALS=https://${{ vars.GITHUB_ACTOR }}:${{ secrets.GITHUB_TOKEN }}@github.com" >> $GITHUB_ENV
-    - run: echo "${{ vars.GITHUB_ACTOR }}"
+    - run: echo "GIT_CREDENTIALS=https://${{ vars.GITHUB_CONTEXT }}:${{ secrets.GITHUB_TOKEN }}@github.com" >> $GITHUB_ENV
+    - run: echo "${{ vars.GITHUB_CONTEXT }}"
     - run: |
         docker build --secret id=${{ env.GIT_CREDENTIALS }} -t starwitorg/sae-anomaly-detection:latest .
