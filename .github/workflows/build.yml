@@ -17,9 +17,9 @@ jobs:
 
     - name: Show GitHub context   
       env: 
-        GITHUB_ACTOR: ${{ vars.ACTOR }}   
+        GITHUB_ACTOR: ${{ github.actor }}   
       run: echo "$GITHUB_CONTEXT"
 
-    - run: echo "GIT_CREDENTIALS=https://${{ vars.GITHUB_CONTEXT }}:${{ secrets.GITHUB_TOKEN }}@github.com" >> $GITHUB_ENV
+    - run: echo "GIT_CREDENTIALS=https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com" >> $GITHUB_ENV
     - run: |
         docker build --secret id=${{ env.GIT_CREDENTIALS }} -t starwitorg/sae-anomaly-detection:latest .
