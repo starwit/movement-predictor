@@ -17,9 +17,13 @@ WORKDIR /code
 RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
     git config --global credential.helper store && \
     poetry install
-    
+
 # Copy the rest of the project
 COPY . /code/
+
+WORKDIR /code
+ENV PATH="/code/.venv/bin:$PATH"
+RUN python test.py
 
 
 ### Main artifact / deliverable image
