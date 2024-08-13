@@ -12,7 +12,7 @@ develop = false
 [package.source]
 type = "git"
 url = "https://github.com/starwit/AETrajectories.git"
-reference = "HEAD"
+reference = "main"
 resolved_reference = "5ad592bf5ad277d1d43f0fd309549ab77d56d999"
 
 [[package]]
@@ -556,4 +556,4 @@ subdirectory = "python"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "a8dde45750088b37cbded1907a525ad92c36a0feefb475223e2a5c269681fc26"
+content-hash = "dfb6577958e9d1f9c94ccea20aee1927482bce3d4470513395d894fbee485ba6"
