@@ -9,12 +9,18 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.10"
 pydantic = "^2.0.0"
+torch = "^2.3.1"
+numpy = "^1.26.4"
 visionapi = { git = "https://github.com/starwit/vision-api.git", subdirectory = "python/visionapi", tag = "2.0.1" }
 visionlib = { git = "https://github.com/starwit/vision-lib.git", subdirectory = "python", tag = "0.10.0" }
 AETrajectories = { git = "https://github.com/starwit/AETrajectories.git", branch = "main" }
 redis = "^5.0.0"
 pydantic-settings = "^2.0.3"
 prometheus-client = "^0.17.1"
+opencv-python = "^4.10.0.84"
+tqdm = "^4.66.4"
+matplotlib = "^3.9.0"
+scipy = "^1.14.0"
 
 [build-system]
 requires = ["poetry-core"]

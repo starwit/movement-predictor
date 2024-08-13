@@ -1,1 +1,1 @@
-from anomalydetection import main
+import main

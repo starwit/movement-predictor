@@ -1,6 +1,4 @@
 import subprocess
-from PIL import Image
-from io import BytesIO
 import time
 import logging
 from collections import defaultdict

@@ -1,7 +1,6 @@
 import logging
 import signal
 import threading
-import time
 
 from prometheus_client import Counter, Histogram, start_http_server
 from visionlib.pipeline.consumer import RedisConsumer
@@ -10,7 +9,6 @@ from anomalydetection.trajectorycollector import TimedTrajectories
 from .config import AnomalyDetectionConfig
 from .anomalydetection import AnomalyDetection
 from anomalydetection.detector import Detector
-from tqdm import tqdm
 
 # globaly deactivate tqdm
 #tqdm.__init__ = lambda *args, **kwargs: None
