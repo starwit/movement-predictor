@@ -19,9 +19,7 @@ jobs:
 
     - name: build docker
       env:
-        GITHUB_USER: ${{ github.actor }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GIT_CREDENTIALS: https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com
+        GIT_CREDENTIALS: https://starwit:${{ secrets.VISION_PIPELINE_READ_TOKEN }}@github.com
       run: |
         export
         docker build --secret id=GIT_CREDENTIALS -t starwitorg/sae-anomaly-detection:latest .
