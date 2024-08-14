@@ -140,12 +140,5 @@ class Detector():
 
         file_path = path + "/anomal_trajectories.json"
 
-        #if os.path.exists(file_path):
-         #   with open(file_path, 'r') as json_file:
-          #      data = json.load(json_file)
-        #else:
-        #data = {}
-        #data.update(new_data)
-
         with open(file_path, 'w') as json_file:
             json.dump(new_data, json_file, indent=4)
