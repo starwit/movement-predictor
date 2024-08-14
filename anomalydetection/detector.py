@@ -5,10 +5,10 @@ import torch.nn as nn
 import os
 import sys
 import anomalydetection.videogeneration
-from AEsAnomalyDetection.RecurrentAE.AE import LSTM_AE
-from AEsAnomalyDetection.RecurrentAE.Validator import plotAnomalTrajectory, plotTrajectory
-from AEsAnomalyDetection.RecurrentAE.Dataset import makeTorchPredictionDataSet
-from AEsAnomalyDetection.DataFilterer import DataFilterer
+from aesanomalydetection.recurrentae.ae import LSTM_AE
+from aesanomalydetection.recurrentae.validator import plotAnomalTrajectory, plotTrajectory
+from aesanomalydetection.recurrentae.dataset import makeTorchPredictionDataSet
+from aesanomalydetection.datafilterer import DataFilterer
 from pathlib import Path
 import matplotlib.pyplot as plt
 from datetime import datetime

@@ -1,7 +1,7 @@
 import time
 import logging
 from datetime import datetime, timezone
-from AEsAnomalyDetection.TrackedObjectPosition import TrackedObjectPosition
+from aesanomalydetection.trackedobjectposition import TrackedObjectPosition
 
 
 
