@@ -3,7 +3,7 @@ import time
 from typing import Any, Dict, NamedTuple
 
 from prometheus_client import Counter, Histogram, Summary
-from visionapi.messages_pb2 import BoundingBox, SaeMessage
+from visionapi.sae_pb2 import SaeMessage
 from visionapi.anomaly_pb2 import AnomalyMessage
 from anomalydetection.detector import Detector
 from anomalydetection.trajectorycollector import TimedTrajectories
@@ -24,6 +24,7 @@ class AnomalyDetection:
     def __init__(self, config: AnomalyDetectionConfig) -> None:
         self.config = config
         logger.setLevel(self.config.log_level.value)
+        self._setup()
  
     def __call__(self, input_proto) -> Any:
         return self.get(input_proto)
@@ -37,7 +38,7 @@ class AnomalyDetection:
         #logger.warning('Received SAE message from pipeline')
 
         #Get anomalies
-        self.timed_data_collector.add(input_proto)
+        self.timed_data_collector.add(sae_msg)
         data = self.timed_data_collector.get_latest_Trajectories()
         frames = self.timed_data_collector.frames
         filtered_data = self.detector.filter_tracks(data)
