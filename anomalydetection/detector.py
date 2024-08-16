@@ -73,11 +73,27 @@ class Detector():
         if len(tracks) != 0:
             tracks = [item for sublist in tracks for item in sublist]
             log.info(f"num tracks before filtering: {len(tracks)}")
-            tracks = DataFilterer().apply_filtering(tracks)
-            log.info(f"num tracks after filtering: {len(tracks)}")
+            if self.parameters["filtering"]:
+                tracks = DataFilterer().apply_filtering(tracks)
+                log.info(f"num tracks after filtering: {len(tracks)}")
+            else:
+                tracks = self._skip_filter_tracks(tracks)
+                log.info(f"TESTING WITHOUT FILTERING")
+        return tracks
+    
+    # TESTING WITHOUT FILTERING
+    def _skip_filter_tracks(self, tracks):
+        mapping = {}
+        for track in tracks:
+            key = track.uuid
+            if key not in mapping:
+                mapping[key] = []
+            mapping[key].append(track)
+        tracks = mapping
         return tracks
 
-    def examine(self, tracks):
+
+    def examine(self, tracks, frames):
         criterion = nn.L1Loss(reduction='sum').to(self.device)
         total_anomalies = []
 
@@ -99,10 +115,12 @@ class Detector():
                         anomalies.append([trajectory, id])
 
             total_anomalies += anomalies
-       
+        
+        #TODO move it to anomaly post processing
+        self._write_anomalies_to_filesystem(total_anomalies, tracks, frames)
         return total_anomalies
     
-    def write_anomalies_to_filesystem(self, total_anomalies, tracks, frames) :
+    def _write_anomalies_to_filesystem(self, total_anomalies, tracks, frames) :
         if len(total_anomalies) > 0:
             
             with SuppressOutput(): 

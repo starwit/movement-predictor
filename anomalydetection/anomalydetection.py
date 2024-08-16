@@ -42,19 +42,16 @@ class AnomalyDetection:
         data = self.timed_data_collector.get_latest_Trajectories()
         frames = self.timed_data_collector.frames
         filtered_data = self.detector.filter_tracks(data)
-        total_anomalies = self._get_anomalies(filtered_data)
+        total_anomalies = self._get_anomalies(filtered_data, frames)
         
-        #TODO move it to anomaly post processing
-        self.detector.write_anomalies_to_filesystem(total_anomalies, data, frames)
-
         #return self._pack_proto(sae_msg)
         inference_time_us = (time.monotonic_ns() - inference_start) // 1000
         return self._create_output(total_anomalies, sae_msg, inference_time_us)
     
-    def _get_anomalies(self, filtered_data):
+    def _get_anomalies(self, filtered_data, frames):
         total_anomalies = []
         if len(filtered_data) != 0:
-            total_anomalies = self.detector.examine(filtered_data)
+            total_anomalies = self.detector.examine(filtered_data, frames)
         return total_anomalies
     
     def _setup(self):

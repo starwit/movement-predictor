@@ -5,5 +5,6 @@
     "model_name": "Recurrent",
     "dimension_latent_space": 8,
     "path_to_model": "anomalydetection/best_model_weights_8dim.pth",
-    "anomaly_loss_threshold": 0.805650600208555
+    "anomaly_loss_threshold": 0.805650600208555,
+    "filtering": true
 }
