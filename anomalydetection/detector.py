@@ -99,28 +99,7 @@ class Detector():
                         anomalies.append([trajectory, id])
 
             total_anomalies += anomalies
-
-        if len(total_anomalies) > 0:
-            
-            with SuppressOutput(): 
-                trajectories_dataset = makeTorchPredictionDataSet(tracks)
-            for batch in trajectories_dataset:
-                plotTrajectory(batch.cpu().numpy(), plotArrows=False)  
-
-            for anomaly in total_anomalies:
-                plotAnomalTrajectory(anomaly[0].view(-1, anomaly[0].size(-1)))   
-            
-            path = "anomalies/anomaly_" + str(datetime.now())
-            os.makedirs(path, exist_ok=True)
-            plt.savefig(path + "/plot.png")
-            plt.close()
-            Detector.store_in_json(total_anomalies, path)
-
-            if self.whole_video:
-                anomalydetection.videogeneration.storeVideo(frames, path, tracks, total_anomalies, log.level) 
-            else:
-                anomalydetection.videogeneration.store_frames(frames, path, tracks, total_anomalies, log.level)
-        
+       
         return total_anomalies
     
     def write_anomalies_to_filesystem(self, total_anomalies, tracks, frames) :
