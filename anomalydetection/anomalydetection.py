@@ -5,8 +5,11 @@ from typing import Any, Dict, NamedTuple
 from prometheus_client import Counter, Histogram, Summary
 from visionapi.sae_pb2 import SaeMessage
 from visionapi.anomaly_pb2 import AnomalyMessage
+from visionapi.common_pb2 import ModelInfo
 from anomalydetection.detector import Detector
 from anomalydetection.trajectorycollector import TimedTrajectories
+from anomalydetection.modelinfoparser import ModelInfoParser
+from google.protobuf import text_format
 
 from .config import AnomalyDetectionConfig
 
@@ -46,7 +49,9 @@ class AnomalyDetection:
         
         #return self._pack_proto(sae_msg)
         inference_time_us = (time.monotonic_ns() - inference_start) // 1000
-        return self._create_output(total_anomalies, sae_msg, inference_time_us)
+
+        if len(total_anomalies) != 0:
+            return self._create_output(total_anomalies, sae_msg, inference_time_us)
     
     def _get_anomalies(self, filtered_data, frames):
         total_anomalies = []
@@ -59,6 +64,8 @@ class AnomalyDetection:
         conf = self.config
         self.detector = Detector(conf)
         self.timed_data_collector = TimedTrajectories(conf.log_level.value, timeout=3)
+        model_info_parser = ModelInfoParser()
+        self.model_info: ModelInfo = model_info_parser.parse()
 
         
     @PROTO_DESERIALIZATION_DURATION.time()
@@ -70,5 +77,11 @@ class AnomalyDetection:
     @PROTO_SERIALIZATION_DURATION.time()
     def _create_output(self, total_anomalies, input_sae_msg: SaeMessage, inference_time_us):
         output_anomaly_msg = AnomalyMessage()
-        
+        output_anomaly_msg.model_info.CopyFrom(self.model_info)
+        self._print_output(output_anomaly_msg)
         return output_anomaly_msg.SerializeToString()
+    
+    def _print_output(self, output_anomaly_msg: AnomalyMessage):
+        f = open('anomalies/log.txt', 'a')
+        f.write(text_format.MessageToString(output_anomaly_msg))
+        f.close()

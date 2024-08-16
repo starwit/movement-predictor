@@ -63,6 +63,6 @@ def run_stage():
 
             if output_proto_data is None:
                 continue
-            
+
             with REDIS_PUBLISH_DURATION.time():
                 publish(f'{CONFIG.redis.output_stream_prefix}:{stream_id}', output_proto_data)
