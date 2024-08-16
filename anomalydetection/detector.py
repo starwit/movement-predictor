@@ -69,7 +69,7 @@ class Detector():
             log.debug(e)
             return None
         
-    def filter_tracks(tracks):
+    def filter_tracks(self, tracks):
         if len(tracks) != 0:
             tracks = [item for sublist in tracks for item in sublist]
             log.info(f"num tracks before filtering: {len(tracks)}")
@@ -77,7 +77,7 @@ class Detector():
             log.info(f"num tracks after filtering: {len(tracks)}")
         return tracks
 
-    def examine(self, tracks, frames):
+    def examine(self, tracks):
         criterion = nn.L1Loss(reduction='sum').to(self.device)
         total_anomalies = []
 
