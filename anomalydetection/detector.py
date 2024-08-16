@@ -69,22 +69,15 @@ class Detector():
             log.debug(e)
             return None
         
-    
+    def filter_tracks(tracks):
+        if len(tracks) != 0:
+            tracks = [item for sublist in tracks for item in sublist]
+            log.info(f"num tracks before filtering: {len(tracks)}")
+            tracks = DataFilterer().apply_filtering(tracks)
+            log.info(f"num tracks after filtering: {len(tracks)}")
+        return tracks
+
     def examine(self, tracks, frames):
-        tracks = [item for sublist in tracks for item in sublist] # flatten tracks list
-        log.info(f"num tracks before filtering: {len(tracks)}")
-
-        # TESTING WITHOUT FILTERING
-        #mapping = {}
-        #for track in tracks:
-        #    key = track.uuid
-        #    if key not in mapping:
-        #        mapping[key] = []
-        #    mapping[key].append(track)
-        #tracks = mapping
-
-        tracks = DataFilterer().apply_filtering(tracks)  
-        log.info(f"num tracks after filtering: {len(tracks)}")
         criterion = nn.L1Loss(reduction='sum').to(self.device)
         total_anomalies = []
 
@@ -130,6 +123,27 @@ class Detector():
         
         return total_anomalies
     
+    def write_anomalies_to_filesystem(self, total_anomalies, tracks, frames) :
+        if len(total_anomalies) > 0:
+            
+            with SuppressOutput(): 
+                trajectories_dataset = makeTorchPredictionDataSet(tracks)
+            for batch in trajectories_dataset:
+                plotTrajectory(batch.cpu().numpy(), plotArrows=False)  
+
+            for anomaly in total_anomalies:
+                plotAnomalTrajectory(anomaly[0].view(-1, anomaly[0].size(-1)))   
+            
+            path = "anomalies/anomaly_" + str(datetime.now())
+            os.makedirs(path, exist_ok=True)
+            plt.savefig(path + "/plot.png")
+            plt.close()
+            Detector.store_in_json(total_anomalies, path)
+
+            if self.whole_video:
+                anomalydetection.videogeneration.storeVideo(frames, path, tracks, total_anomalies, log.level) 
+            else:
+                anomalydetection.videogeneration.store_frames(frames, path, tracks, total_anomalies, log.level)   
 
     def store_in_json(anomalies, path):
         new_data = {}

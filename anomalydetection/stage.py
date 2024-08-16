@@ -41,17 +41,14 @@ def run_stage():
 
     start_http_server(CONFIG.prometheus_port)
 
-    logger.info(f'Starting geo mapper stage. Config: {CONFIG.model_dump_json(indent=2)}')
+    logger.info(f'Starting anomaly detection stage. Config: {CONFIG.model_dump_json(indent=2)}')
 
     anomaly_detection = AnomalyDetection(CONFIG)
 
     consume = RedisConsumer(CONFIG.redis.host, CONFIG.redis.port, 
                             stream_keys=[f'{CONFIG.redis.input_stream_prefix}:{CONFIG.redis.stream_id}'])
     publish = RedisPublisher(CONFIG.redis.host, CONFIG.redis.port)
-
-    detector = Detector(CONFIG)
-    timed_data_collector = TimedTrajectories(CONFIG.log_level.value, timeout=3)
-    
+  
     with consume, publish:
         for stream_key, proto_data in consume():
             if stop_event.is_set():
@@ -65,16 +62,9 @@ def run_stage():
             FRAME_COUNTER.inc()
 
             output_proto_data = anomaly_detection.get(proto_data)
-            timed_data_collector.add(output_proto_data)
-            output_proto_data = anomaly_detection._pack_proto(output_proto_data)
 
             if output_proto_data is None:
                 continue
             
             with REDIS_PUBLISH_DURATION.time():
                 publish(f'{CONFIG.redis.output_stream_prefix}:{stream_id}', output_proto_data)
-            
-            data = timed_data_collector.get_latest_Trajectories()
-            frames = timed_data_collector.frames
-            if len(data) != 0:
-                detector.examine(data, frames)

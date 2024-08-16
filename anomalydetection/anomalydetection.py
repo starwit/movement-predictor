@@ -1,8 +1,12 @@
 import logging
+import time
 from typing import Any, Dict, NamedTuple
 
 from prometheus_client import Counter, Histogram, Summary
 from visionapi.messages_pb2 import BoundingBox, SaeMessage
+from visionapi.anomaly_pb2 import AnomalyMessage
+from anomalydetection.detector import Detector
+from anomalydetection.trajectorycollector import TimedTrajectories
 
 from .config import AnomalyDetectionConfig
 
@@ -27,19 +31,46 @@ class AnomalyDetection:
     @GET_DURATION.time()
     def get(self, input_proto):
         sae_msg = self._unpack_proto(input_proto)
+        inference_start = time.monotonic_ns()
 
         # Your implementation goes (mostly) here
         #logger.warning('Received SAE message from pipeline')
-        return sae_msg
+
+        #Get anomalies
+        self.timed_data_collector.add(input_proto)
+        data = self.timed_data_collector.get_latest_Trajectories()
+        frames = self.timed_data_collector.frames
+        filtered_data = self.detector.filter_tracks(data)
+        total_anomalies = self._get_anomalies(filtered_data, frames)
+        
+        #TODO move it to anomaly post processing
+        self.detector.write_anomalies_to_filesystem(total_anomalies, filtered_data, frames)
+
         #return self._pack_proto(sae_msg)
+        inference_time_us = (time.monotonic_ns() - inference_start) // 1000
+        return self._create_output(total_anomalies, sae_msg, inference_time_us)
+    
+    def _get_anomalies(self, filtered_data, frames):
+        total_anomalies = []
+        if len(filtered_data) != 0:
+            total_anomalies = self.detector.examine(filtered_data, frames)
+        return total_anomalies
+    
+    def _setup(self):
+        logger.info(f'Setup Anomaly Detection')
+        conf = self.config
+        self.detector = Detector(conf)
+        self.timed_data_collector = TimedTrajectories(conf.log_level.value, timeout=3)
+
         
     @PROTO_DESERIALIZATION_DURATION.time()
     def _unpack_proto(self, sae_message_bytes):
         sae_msg = SaeMessage()
         sae_msg.ParseFromString(sae_message_bytes)
-
         return sae_msg
     
     @PROTO_SERIALIZATION_DURATION.time()
-    def _pack_proto(self, sae_msg: SaeMessage):
-        return sae_msg.SerializeToString()
+    def _create_output(self, total_anomalies, input_sae_msg: SaeMessage, inference_time_us):
+        output_anomaly_msg = AnomalyMessage()
+        
+        return output_anomaly_msg.SerializeToString()
