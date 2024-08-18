@@ -9,6 +9,10 @@ from aesanomalydetection.recurrentae.ae import LSTM_AE
 from aesanomalydetection.recurrentae.validator import plotAnomalTrajectory, plotTrajectory
 from aesanomalydetection.recurrentae.dataset import makeTorchPredictionDataSet
 from aesanomalydetection.datafilterer import DataFilterer
+from visionapi.anomaly_pb2 import AnomalyMessage
+from visionapi.anomaly_pb2 import Trajectory
+from visionapi.anomaly_pb2 import TrajectoryPoint
+from visionapi.anomaly_pb2 import Point
 from pathlib import Path
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -115,11 +119,42 @@ class Detector():
                         anomalies.append([trajectory, id])
 
             total_anomalies += anomalies
-        
-        #TODO move it to anomaly post processing
-        self._write_anomalies_to_filesystem(total_anomalies, tracks, frames)
-        return total_anomalies
+        if self.parameters["testing"]:
+            #TODO move it to anomaly post processing
+            self._write_anomalies_to_filesystem(total_anomalies, tracks, frames)
+
+        #TODO consider refactorying format of total_anomalies
+        anomaly_msg = AnomalyMessage()
+        anomaly_msg = self._write_anomaly_message(total_anomalies, frames)
+        return anomaly_msg
     
+    def _write_anomaly_message(self, total_anomalies, frames) :
+        anomaly_msg = AnomalyMessage()
+        if len(total_anomalies) > 0:
+            for anomaly in total_anomalies:
+                trajectory = anomaly_msg.trajectories.add() 
+                trajectory.CopyFrom(self._map_anomaly(anomaly[0].view(-1, anomaly[0].size(-1))))
+        
+        if len(frames) > 0:
+            for frame in frames:
+                anomaly_frame = anomaly_msg.jpeg_frames.add()
+                anomaly_frame.frame_data_jpeg = frame.frame_data_jpeg
+                anomaly_frame.timestamp_utc_ms = frame.timestamp_utc_ms
+        return anomaly_msg
+
+    def _map_anomaly(self, anomaly) :
+        trajectory_point = TrajectoryPoint()
+        center_point = Point()
+        #TODO why only anomaly[0]?
+        center_point.x = [point for point in anomaly[0]][0]
+        center_point.y = [1 - point for point in anomaly[0]][1]
+        trajectory = Trajectory()
+        trajectory_point = trajectory.trajectory_points.add()
+        trajectory_point.detection_center.CopyFrom(center_point)
+        #trajectory_point.timestamp_utc_ms = anomaly.timestamp_utc_ms
+        return trajectory
+
+
     def _write_anomalies_to_filesystem(self, total_anomalies, tracks, frames) :
         if len(total_anomalies) > 0:
             
@@ -129,7 +164,8 @@ class Detector():
                 plotTrajectory(batch.cpu().numpy(), plotArrows=False)  
 
             for anomaly in total_anomalies:
-                plotAnomalTrajectory(anomaly[0].view(-1, anomaly[0].size(-1)))   
+                plot_anomaly = anomaly[0].view(-1, anomaly[0].size(-1))
+                plotAnomalTrajectory(plot_anomaly)   
             
             path = "anomalies/anomaly_" + str(datetime.now())
             os.makedirs(path, exist_ok=True)

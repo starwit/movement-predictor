@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Dict, NamedTuple
+from typing import Any
 
 from prometheus_client import Counter, Histogram, Summary
 from visionapi.sae_pb2 import SaeMessage
@@ -45,19 +45,19 @@ class AnomalyDetection:
         data = self.timed_data_collector.get_latest_Trajectories()
         frames = self.timed_data_collector.frames
         filtered_data = self.detector.filter_tracks(data)
-        total_anomalies = self._get_anomalies(filtered_data, frames)
+        anomaly_message = self._get_anomalies(filtered_data, frames)
         
         #return self._pack_proto(sae_msg)
         inference_time_us = (time.monotonic_ns() - inference_start) // 1000
 
-        if len(total_anomalies) != 0:
-            return self._create_output(total_anomalies, sae_msg, inference_time_us)
+        if len(anomaly_message.trajectories) != 0:
+            return self._create_output(anomaly_message)
     
     def _get_anomalies(self, filtered_data, frames):
-        total_anomalies = []
+        anomaly_message = AnomalyMessage()
         if len(filtered_data) != 0:
-            total_anomalies = self.detector.examine(filtered_data, frames)
-        return total_anomalies
+            anomaly_message = self.detector.examine(filtered_data, frames)
+        return anomaly_message
     
     def _setup(self):
         logger.info(f'Setup Anomaly Detection')
@@ -75,10 +75,10 @@ class AnomalyDetection:
         return sae_msg
     
     @PROTO_SERIALIZATION_DURATION.time()
-    def _create_output(self, total_anomalies, input_sae_msg: SaeMessage, inference_time_us):
-        output_anomaly_msg = AnomalyMessage()
+    def _create_output(self, output_anomaly_msg):
         output_anomaly_msg.model_info.CopyFrom(self.model_info)
-        self._print_output(output_anomaly_msg)
+        if self.detector.parameters["testing"]:
+            self._print_output(output_anomaly_msg)
         return output_anomaly_msg.SerializeToString()
     
     def _print_output(self, output_anomaly_msg: AnomalyMessage):
