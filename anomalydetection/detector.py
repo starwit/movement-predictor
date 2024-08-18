@@ -151,6 +151,7 @@ class Detector():
         trajectory = Trajectory()
         trajectory_point = trajectory.trajectory_points.add()
         trajectory_point.detection_center.CopyFrom(center_point)
+        #TODO: timestamp_utc_ms is not set
         #trajectory_point.timestamp_utc_ms = anomaly.timestamp_utc_ms
         return trajectory
 
