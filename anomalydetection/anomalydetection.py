@@ -35,7 +35,6 @@ class AnomalyDetection:
     @GET_DURATION.time()
     def get(self, input_proto):
         sae_msg = self._unpack_proto(input_proto)
-        inference_start = time.monotonic_ns()
 
         # Your implementation goes (mostly) here
         #logger.warning('Received SAE message from pipeline')
@@ -45,19 +44,10 @@ class AnomalyDetection:
         data = self.timed_data_collector.get_latest_Trajectories()
         frames = self.timed_data_collector.frames
         filtered_data = self.detector.filter_tracks(data)
-        anomaly_message = self._get_anomalies(filtered_data, frames)
-        
-        #return self._pack_proto(sae_msg)
-        inference_time_us = (time.monotonic_ns() - inference_start) // 1000
+        anomaly_message = self.detector.examine(filtered_data, frames)
 
         if len(anomaly_message.trajectories) != 0:
             return self._create_output(anomaly_message)
-    
-    def _get_anomalies(self, filtered_data, frames):
-        anomaly_message = AnomalyMessage()
-        if len(filtered_data) != 0:
-            anomaly_message = self.detector.examine(filtered_data, frames)
-        return anomaly_message
     
     def _setup(self):
         logger.info(f'Setup Anomaly Detection')

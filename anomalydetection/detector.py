@@ -85,64 +85,53 @@ class Detector():
                 log.info(f"TESTING WITHOUT FILTERING")
         return tracks
     
-    # TESTING WITHOUT FILTERING
-    def _skip_filter_tracks(self, tracks):
-        mapping = {}
-        for track in tracks:
-            key = track.uuid
-            if key not in mapping:
-                mapping[key] = []
-            mapping[key].append(track)
-        tracks = mapping
-        return tracks
-
-
-    def examine(self, tracks, frames):
-        criterion = nn.L1Loss(reduction='sum').to(self.device)
+    def examine(self, tracks, frames) -> AnomalyMessage:
         total_anomalies = []
+        if len(tracks) != 0:
+            criterion = nn.L1Loss(reduction='sum').to(self.device)
 
-        for id in tracks.keys():
-            anomalies=[] 
-            if len(tracks[id]) < 5:
-                continue
-            with SuppressOutput():      # suppress tqdm progress bar
-                trajectories_dataset = makeTorchPredictionDataSet({id: tracks[id]})
+            for id in tracks.keys():
+                anomalies=[] 
+                if len(tracks[id]) < 5:
+                    continue
+                with SuppressOutput():      # suppress tqdm progress bar
+                    trajectories_dataset = makeTorchPredictionDataSet({id: tracks[id]})
 
-            with torch.no_grad():
-                for trajectory in trajectories_dataset:
-                    trajectory = trajectory.to(self.device).reshape(-1, trajectory.shape[-2], trajectory.shape[-1])
-                    target = trajectory
-                    pred = self.model(target)
-                    loss = criterion(pred, target)
-                    if loss.item() > self.parameters["anomaly_loss_threshold"]:
-                        log.info("anomaly found")
-                        anomalies.append([trajectory, id])
+                with torch.no_grad():
+                    for trajectory in trajectories_dataset:
+                        trajectory = trajectory.to(self.device).reshape(-1, trajectory.shape[-2], trajectory.shape[-1])
+                        target = trajectory
+                        pred = self.model(target)
+                        loss = criterion(pred, target)
+                        if loss.item() > self.parameters["anomaly_loss_threshold"]:
+                            log.info("anomaly found")
+                            anomalies.append([trajectory, id])
 
-            total_anomalies += anomalies
-        if self.parameters["testing"]:
-            #TODO move it to anomaly post processing
-            self._write_anomalies_to_filesystem(total_anomalies, tracks, frames)
+                total_anomalies += anomalies
+            if self.parameters["testing"]:
+                #TODO move it to anomaly post processing
+                self._write_anomalies_to_filesystem(total_anomalies, tracks, frames)
 
         #TODO consider refactorying format of total_anomalies
-        anomaly_msg = AnomalyMessage()
-        anomaly_msg = self._write_anomaly_message(total_anomalies, frames)
-        return anomaly_msg
+        return self._write_anomaly_message(total_anomalies, frames)
     
-    def _write_anomaly_message(self, total_anomalies, frames) :
+    def _write_anomaly_message(self, total_anomalies, frames) -> AnomalyMessage:
         anomaly_msg = AnomalyMessage()
+
         if len(total_anomalies) > 0:
             for anomaly in total_anomalies:
                 trajectory = anomaly_msg.trajectories.add() 
                 trajectory.CopyFrom(self._map_anomaly(anomaly[0].view(-1, anomaly[0].size(-1))))
         
-        if len(frames) > 0:
-            for frame in frames:
-                anomaly_frame = anomaly_msg.jpeg_frames.add()
-                anomaly_frame.frame_data_jpeg = frame.frame_data_jpeg
-                anomaly_frame.timestamp_utc_ms = frame.timestamp_utc_ms
+            if len(frames) > 0:
+                for frame in frames:
+                    anomaly_frame = anomaly_msg.jpeg_frames.add()
+                    anomaly_frame.frame_data_jpeg = frame.frame_data_jpeg
+                    anomaly_frame.timestamp_utc_ms = frame.timestamp_utc_ms
+        
         return anomaly_msg
 
-    def _map_anomaly(self, anomaly) :
+    def _map_anomaly(self, anomaly) -> Trajectory:
         trajectory_point = TrajectoryPoint()
         center_point = Point()
         #TODO why only anomaly[0]?
@@ -155,8 +144,18 @@ class Detector():
         #trajectory_point.timestamp_utc_ms = anomaly.timestamp_utc_ms
         return trajectory
 
+    # TESTING WITHOUT FILTERING
+    def _skip_filter_tracks(self, tracks):
+        mapping = {}
+        for track in tracks:
+            key = track.uuid
+            if key not in mapping:
+                mapping[key] = []
+            mapping[key].append(track)
+        tracks = mapping
+        return tracks
 
-    def _write_anomalies_to_filesystem(self, total_anomalies, tracks, frames) :
+    def _write_anomalies_to_filesystem(self, total_anomalies, tracks, frames):
         if len(total_anomalies) > 0:
             
             with SuppressOutput(): 
