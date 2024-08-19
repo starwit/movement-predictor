@@ -24,13 +24,13 @@ jobs:
         username: ${{ secrets.DOCKER_INTERNAL_USERNAME }}
         password: ${{ secrets.DOCKER_INTERNAL_PASSWORD }}
 
-    - name: build docker latest
+    - name: build docker
       env:
         GIT_CREDENTIALS: https://starwit:${{ secrets.VISION_PIPELINE_READ_TOKEN }}@github.com
       run: |
         docker build --secret id=GIT_CREDENTIALS -t docker.internal.starwit-infra.de/sae-anomaly-detection:latest .
 
-    - name: push docker latest
+    - name: push docker latest and versioned
       run: |
         DOCKER_VERSION=$(cat pyproject.toml | grep "version" | cut -d'=' -f2 | xargs echo -n)
         docker tag docker.internal.starwit-infra.de/sae-anomaly-detection:latest docker.internal.starwit-infra.de/sae-anomaly-detection:$DOCKER_VERSION
