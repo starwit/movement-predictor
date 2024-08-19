@@ -18,7 +18,7 @@ class AnomalyDetectionConfig(BaseSettings):
     redis: RedisConfig = RedisConfig()
     prometheus_port: Annotated[int, Field(ge=1024, le=65536)] = 8000
     model_config = SettingsConfigDict(env_nested_delimiter='__')
-    path_to_model_config: ClassVar[str] = "anomalydetection/parameters_test.json" #= os.getenv("PATH_TO_MODEL_CONFIG")
+    path_to_model_config: ClassVar[str] = "anomalydetection/parameters.json" #= os.getenv("PATH_TO_MODEL_CONFIG")
     whole_video: bool = False
 
     
