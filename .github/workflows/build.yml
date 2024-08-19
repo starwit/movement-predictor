@@ -1,4 +1,4 @@
-name: docker-internal build and push latest
+name: docker-internal build and push
 
 on:
   workflow_dispatch:
@@ -32,4 +32,7 @@ jobs:
 
     - name: push docker latest
       run: |
+        DOCKER_VERSION=$(cat pyproject.toml | grep "version" | cut -d'=' -f2 | xargs echo -n)
+        docker tag docker.internal.starwit-infra.de/sae-anomaly-detection:latest docker.internal.starwit-infra.de/sae-anomaly-detection:$DOCKER_VERSION
+        docker push docker.internal.starwit-infra.de/sae-anomaly-detection:$DOCKER_VERSION
         docker push docker.internal.starwit-infra.de/sae-anomaly-detection:latest
