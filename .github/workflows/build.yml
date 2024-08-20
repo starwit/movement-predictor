@@ -28,11 +28,10 @@ jobs:
       env:
         GIT_CREDENTIALS: https://starwit:${{ secrets.VISION_PIPELINE_READ_TOKEN }}@github.com
       run: |
-        docker build --secret id=GIT_CREDENTIALS -t docker.internal.starwit-infra.de/sae-anomaly-detection:latest .
+        docker build --secret id=GIT_CREDENTIALS -t docker.internal.starwit-infra.de/sae-anomaly-detection:tmp .
 
     - name: push docker latest and versioned
       run: |
         DOCKER_VERSION=$(cat pyproject.toml | grep "version" | cut -d'=' -f2 | xargs echo -n)
-        docker tag docker.internal.starwit-infra.de/sae-anomaly-detection:latest docker.internal.starwit-infra.de/sae-anomaly-detection:$DOCKER_VERSION
+        docker tag docker.internal.starwit-infra.de/sae-anomaly-detection:tmp docker.internal.starwit-infra.de/sae-anomaly-detection:$DOCKER_VERSION
         docker push docker.internal.starwit-infra.de/sae-anomaly-detection:$DOCKER_VERSION
-        docker push docker.internal.starwit-infra.de/sae-anomaly-detection:latest
