@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: anomaly-detection-config
+data:
+  settings.yaml: |
+    {{- toYaml .Values.anomalyDetection.config | nindent 4 }}

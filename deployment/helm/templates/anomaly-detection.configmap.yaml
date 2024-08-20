@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: anomaly-post-processing-config
+data:
+  settings.yaml: |
+    {{- toYaml .Values.anomalyPostProcessing.config | nindent 4 }}

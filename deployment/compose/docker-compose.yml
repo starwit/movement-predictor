@@ -1,0 +1,16 @@
+services:
+  anomaly-detection:
+    image: ${PRIVATE_IMAGE_REGISTRY}/sae-anomaly-detection:${ANOMALY_DETECTION_VERSION}
+    volumes:
+      - ./anomaly-detection/settings.yaml:/code/anomaly-detection.settings.yaml
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  anomaly-post-processor:
+    image: ${PRIVATE_IMAGE_REGISTRY}/anomaly-post-processing:${ANOMALY_POST_PROCESSING_VERSION}
+    volumes:
+      - ./anomaly-post-processing/anomaly-post-processing.settings.yaml:/code/settings.yaml
+    depends_on:
+      redis:
+        condition: service_healthy
