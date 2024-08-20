@@ -10,34 +10,18 @@ from anomalydetection.config import AnomalyDetectionConfig
 log = logging.getLogger(__name__)
 
 class ModelInfoCollector:
-    __instance = None
-  
-    @staticmethod
-    def get_model_parameter():
-        return ModelInfoCollector._getInstance().model_parameters
 
-    @staticmethod
-    def get_model_info() -> ModelInfo:
+    def __init__(self, CONFIG: AnomalyDetectionConfig) -> None:
+        self.pkg_meta: Dict[str, str] = self._read_project_meta()
+        self.model_parameters = self._read_model_info_from_json(CONFIG.path_to_model_config)
+        self.mode_info: ModelInfo = self._get_model_info()
+
+    def _get_model_info(self) -> ModelInfo:
         model_info = ModelInfo();
-        model_info.name = ModelInfoCollector._getInstance().model_parameters["model_name"]
+        model_info.name = self.model_parameters["model_name"]
         #TODO get model version
-        model_info.version = ModelInfoCollector._getInstance().pkg_meta.get("version")
+        model_info.version = self.pkg_meta.get("version")
         return model_info 
-    
-    @staticmethod
-    def _getInstance():
-        if ModelInfoCollector.__instance == None:
-            ModelInfoCollector()
-        return ModelInfoCollector.__instance
-
-    def __init__(self):
-        if ModelInfoCollector.__instance != None:
-            raise Exception("Singleton object already created!")
-        else:     
-            self.config = AnomalyDetectionConfig();
-            self.pkg_meta: Dict[str, str] = self._read_project_meta()
-            self.model_parameters = self._read_model_info_from_json(self.config.path_to_model_config)
-            ModelInfoCollector.__instance = self
 
     def _read_project_meta(self, pyproj_path: str = "./pyproject.toml") -> Dict[str, str]:
         if os.path.exists(pyproj_path):

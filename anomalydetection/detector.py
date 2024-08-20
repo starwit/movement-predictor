@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import os
 import sys
+from anomalydetection.config import AnomalyDetectionConfig
 import anomalydetection.videogeneration
 from aesanomalydetection.recurrentae.ae import LSTM_AE
 from aesanomalydetection.recurrentae.validator import plotAnomalTrajectory, plotTrajectory
@@ -38,9 +39,10 @@ class SuppressOutput:
 
 class Detector():
 
-    def __init__(self, CONFIG):
+    def __init__(self, CONFIG: AnomalyDetectionConfig) -> None:
         log.setLevel(CONFIG.log_level.value)
-        self.parameters = ModelInfoCollector.get_model_parameter()
+        model_info_collector = ModelInfoCollector(CONFIG)
+        self.parameters = model_info_collector.model_parameters
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = LSTM_AE(self.parameters["dimension_latent_space"]).to(self.device)
         self.whole_video = CONFIG.whole_video

@@ -24,8 +24,10 @@ PROTO_DESERIALIZATION_DURATION = Summary('anomaly_detection_proto_deserializatio
 
 
 class AnomalyDetection:
-    def __init__(self, config: AnomalyDetectionConfig) -> None:
-        self.config = config
+    def __init__(self, CONFIG: AnomalyDetectionConfig) -> None:
+        self.config = CONFIG
+        model_info_collector = ModelInfoCollector(CONFIG)
+        self.model_info = model_info_collector.mode_info
         logger.setLevel(self.config.log_level.value)
         self._setup()
  
@@ -35,9 +37,6 @@ class AnomalyDetection:
     @GET_DURATION.time()
     def get(self, input_proto):
         sae_msg = self._unpack_proto(input_proto)
-
-        # Your implementation goes (mostly) here
-        #logger.warning('Received SAE message from pipeline')
 
         #Get anomalies
         self.timed_data_collector.add(sae_msg)
@@ -63,7 +62,8 @@ class AnomalyDetection:
     
     @PROTO_SERIALIZATION_DURATION.time()
     def _create_output(self, output_anomaly_msg):
-        output_anomaly_msg.model_info.CopyFrom(ModelInfoCollector.get_model_info)
+
+        output_anomaly_msg.model_info.CopyFrom(self.model_info)
         if self.detector.parameters["testing"]:
             self._print_output(output_anomaly_msg)
         return output_anomaly_msg.SerializeToString()
