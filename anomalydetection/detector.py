@@ -9,6 +9,7 @@ from aesanomalydetection.recurrentae.ae import LSTM_AE
 from aesanomalydetection.recurrentae.validator import plotAnomalTrajectory, plotTrajectory
 from aesanomalydetection.recurrentae.dataset import makeTorchPredictionDataSet
 from aesanomalydetection.datafilterer import DataFilterer
+from anomalydetection.modelinfocollector import ModelInfoCollector
 from visionapi.anomaly_pb2 import AnomalyMessage
 from visionapi.anomaly_pb2 import Trajectory
 from visionapi.anomaly_pb2 import TrajectoryPoint
@@ -39,7 +40,7 @@ class Detector():
 
     def __init__(self, CONFIG):
         log.setLevel(CONFIG.log_level.value)
-        self.parameters = Detector.read_json(CONFIG.path_to_model_config)
+        self.parameters = ModelInfoCollector.get_model_parameter()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = LSTM_AE(self.parameters["dimension_latent_space"]).to(self.device)
         self.whole_video = CONFIG.whole_video
@@ -58,21 +59,7 @@ class Detector():
         log.info("starting anomaly detection with parameters:")
         for key in self.parameters.keys():
             log.info(key + ": " + str(self.parameters[key]))
-
-
-    def read_json(file_path):
-        try:
-            file_path = Path(file_path)
-            if not file_path.exists():
-                log.error(f"Could not find model parameters at {file_path}")
-                return None
-            with file_path.open('r') as file:
-                return json.load(file)
-        except IOError as e:
-            log.error(f"Could not read model parameters {file_path}")
-            log.debug(e)
-            return None
-        
+      
     def filter_tracks(self, tracks):
         if len(tracks) != 0:
             tracks = [item for sublist in tracks for item in sublist]

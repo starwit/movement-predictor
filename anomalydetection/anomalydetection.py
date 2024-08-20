@@ -8,7 +8,7 @@ from visionapi.anomaly_pb2 import AnomalyMessage
 from visionapi.common_pb2 import ModelInfo
 from anomalydetection.detector import Detector
 from anomalydetection.trajectorycollector import TimedTrajectories
-from anomalydetection.modelinfoparser import ModelInfoParser
+from anomalydetection.modelinfocollector import ModelInfoCollector
 from google.protobuf import text_format
 
 from .config import AnomalyDetectionConfig
@@ -54,9 +54,6 @@ class AnomalyDetection:
         conf = self.config
         self.detector = Detector(conf)
         self.timed_data_collector = TimedTrajectories(conf.log_level.value, timeout=3)
-        model_info_parser = ModelInfoParser()
-        self.model_info: ModelInfo = model_info_parser.parse()
-
         
     @PROTO_DESERIALIZATION_DURATION.time()
     def _unpack_proto(self, sae_message_bytes):
@@ -66,7 +63,7 @@ class AnomalyDetection:
     
     @PROTO_SERIALIZATION_DURATION.time()
     def _create_output(self, output_anomaly_msg):
-        output_anomaly_msg.model_info.CopyFrom(self.model_info)
+        output_anomaly_msg.model_info.CopyFrom(ModelInfoCollector.get_model_info)
         if self.detector.parameters["testing"]:
             self._print_output(output_anomaly_msg)
         return output_anomaly_msg.SerializeToString()
