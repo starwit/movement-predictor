@@ -6,6 +6,5 @@ cache
 *.pt
 .vscode
 settings.yaml
-!settings.template.yaml
 .python-version
 anomalies/*
