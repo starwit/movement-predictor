@@ -1,8 +1,15 @@
 import logging
-from typing import Any, Dict, NamedTuple
+import time
+from typing import Any
 
 from prometheus_client import Counter, Histogram, Summary
-from visionapi.messages_pb2 import BoundingBox, SaeMessage
+from visionapi.sae_pb2 import SaeMessage
+from visionapi.anomaly_pb2 import AnomalyMessage
+from visionapi.common_pb2 import ModelInfo
+from anomalydetection.detector import Detector
+from anomalydetection.trajectorycollector import TimedTrajectories
+from anomalydetection.modelinfocollector import ModelInfoCollector
+from google.protobuf import text_format
 
 from .config import AnomalyDetectionConfig
 
@@ -17,9 +24,12 @@ PROTO_DESERIALIZATION_DURATION = Summary('anomaly_detection_proto_deserializatio
 
 
 class AnomalyDetection:
-    def __init__(self, config: AnomalyDetectionConfig) -> None:
-        self.config = config
+    def __init__(self, CONFIG: AnomalyDetectionConfig) -> None:
+        self.config = CONFIG
+        model_info_collector = ModelInfoCollector(CONFIG)
+        self.model_info = model_info_collector.model_info
         logger.setLevel(self.config.log_level.value)
+        self._setup()
  
     def __call__(self, input_proto) -> Any:
         return self.get(input_proto)
@@ -28,18 +38,37 @@ class AnomalyDetection:
     def get(self, input_proto):
         sae_msg = self._unpack_proto(input_proto)
 
-        # Your implementation goes (mostly) here
-        #logger.warning('Received SAE message from pipeline')
-        return sae_msg
-        #return self._pack_proto(sae_msg)
+        #Get anomalies
+        self.timed_data_collector.add(sae_msg)
+        data = self.timed_data_collector.get_latest_Trajectories()
+        frames = self.timed_data_collector.frames
+        filtered_data = self.detector.filter_tracks(data)
+        anomaly_message = self.detector.examine(filtered_data, frames)
+
+        if len(anomaly_message.trajectories) != 0:
+            return self._create_output(anomaly_message)
+    
+    def _setup(self):
+        logger.info(f'Setup Anomaly Detection')
+        conf = self.config
+        self.detector = Detector(conf)
+        self.timed_data_collector = TimedTrajectories(conf.log_level.value, timeout=3)
         
     @PROTO_DESERIALIZATION_DURATION.time()
     def _unpack_proto(self, sae_message_bytes):
         sae_msg = SaeMessage()
         sae_msg.ParseFromString(sae_message_bytes)
-
         return sae_msg
     
     @PROTO_SERIALIZATION_DURATION.time()
-    def _pack_proto(self, sae_msg: SaeMessage):
-        return sae_msg.SerializeToString()
+    def _create_output(self, output_anomaly_msg):
+
+        output_anomaly_msg.model_info.CopyFrom(self.model_info)
+        if self.detector.parameters["testing"]:
+            self._print_output(output_anomaly_msg)
+        return output_anomaly_msg.SerializeToString()
+    
+    def _print_output(self, output_anomaly_msg: AnomalyMessage):
+        f = open('anomalies/log.txt', 'a')
+        f.write(text_format.MessageToString(output_anomaly_msg))
+        f.close()
