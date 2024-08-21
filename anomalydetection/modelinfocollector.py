@@ -20,7 +20,7 @@ class ModelInfoCollector:
         model_info = ModelInfo();
         model_info.name = self.model_parameters["model_name"]
         #TODO get model version
-        model_info.version = self.pkg_meta.get("version", "none")
+        model_info.version = self.pkg_meta.get("version", "")
         return model_info 
 
     def _read_project_meta(self, pyproj_path: str = "./pyproject.toml") -> Dict[str, str]:
