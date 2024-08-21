@@ -14,7 +14,7 @@ class ModelInfoCollector:
     def __init__(self, CONFIG: AnomalyDetectionConfig) -> None:
         self.pkg_meta: Dict[str, str] = self._read_project_meta()
         self.model_parameters = self._read_model_info_from_json(CONFIG.path_to_model_config)
-        self.mode_info: ModelInfo = self._get_model_info()
+        self.model_info: ModelInfo = self._get_model_info()
 
     def _get_model_info(self) -> ModelInfo:
         model_info = ModelInfo();

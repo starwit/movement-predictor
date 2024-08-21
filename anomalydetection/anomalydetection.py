@@ -27,7 +27,7 @@ class AnomalyDetection:
     def __init__(self, CONFIG: AnomalyDetectionConfig) -> None:
         self.config = CONFIG
         model_info_collector = ModelInfoCollector(CONFIG)
-        self.model_info = model_info_collector.mode_info
+        self.model_info = model_info_collector.model_info
         logger.setLevel(self.config.log_level.value)
         self._setup()
  
