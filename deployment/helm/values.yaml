@@ -1,0 +1,19 @@
+nameOverride: ""
+fullnameOverride: ""
+
+anomalyDetection:
+  image:
+    repository: docker.internal.starwit-infra.de/sae-anomaly-detection
+    tag: 0.1.0
+  stream_id: stream1
+  config:
+    log_level: DEBUG
+    path_to_model_config: anomalydetection/parameters.json
+    whole_video: False
+
+anomalyPostProcessing:
+  image:
+    repository: docker.internal.starwit-infra.de/anomaly-post-processing
+    tag: 0.1.0
+  stream_id: stream1
+

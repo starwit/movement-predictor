@@ -5,7 +5,6 @@ __pycache__
 cache
 *.pt
 .vscode
-*.yaml
-!settings.template.yaml
+settings.yaml
 .python-version
 anomalies/*
