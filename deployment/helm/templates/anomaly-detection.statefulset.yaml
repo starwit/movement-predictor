@@ -30,7 +30,6 @@ spec:
       initContainers:
         - name: wait-for-redis
           image: valkey/valkey:7.2.6-alpine
-          command: ["sh", "-c", "while ! redis-cli -h {{ include "sae.redisServiceName" $ }} ping ; do echo \"$(date -Iseconds) - still waiting for redis\"; sleep 1; done"]
           command: ["sh", "-c", "while ! redis-cli -h {{ include "ande.redisServiceName" $ }} ping ; do echo \"$(date -Iseconds) - still waiting for redis\"; sleep 1; done"]
       containers:
         - name: {{ $instanceName }}
