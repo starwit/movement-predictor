@@ -1,3 +1,5 @@
+name: anomaly
+
 services:
   anomaly-detection:
     image: ${PRIVATE_IMAGE_REGISTRY}/sae-anomaly-detection:${ANOMALY_DETECTION_VERSION}
