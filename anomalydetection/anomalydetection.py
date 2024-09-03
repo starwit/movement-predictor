@@ -43,7 +43,7 @@ class AnomalyDetection:
         data = self.timed_data_collector.get_latest_Trajectories()
         frames = self.timed_data_collector.frames
         filtered_data = self.detector.filter_tracks(data)
-        anomaly_message = self.detector.examine(filtered_data, frames)
+        anomaly_message = self.detector.examine_tracks_for_anomalies(filtered_data, frames)
 
         if len(anomaly_message.trajectories) != 0:
             return self._create_output(anomaly_message)

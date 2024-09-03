@@ -8,9 +8,6 @@ from visionlib.pipeline.publisher import RedisPublisher
 from .config import AnomalyDetectionConfig
 from .anomalydetection import AnomalyDetection
 
-# globaly deactivate tqdm
-#tqdm.__init__ = lambda *args, **kwargs: None
-
 logger = logging.getLogger(__name__)
 
 REDIS_PUBLISH_DURATION = Histogram('anomaly_detection_redis_publish_duration', 'The time it takes to push a message onto the Redis stream',

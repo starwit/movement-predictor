@@ -74,7 +74,7 @@ class Detector():
                 log.info(f"TESTING WITHOUT FILTERING")
         return tracks
     
-    def examine(self, tracks, frames) -> AnomalyMessage:
+    def examine_tracks_for_anomalies(self, tracks, frames) -> AnomalyMessage:
         total_anomalies = []
         if len(tracks) != 0:
             criterion = nn.L1Loss(reduction='sum').to(self.device)
