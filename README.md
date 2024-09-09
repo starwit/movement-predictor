@@ -18,7 +18,7 @@ This repository takes the results of the Starwit Awareness Engine, calls Anomaly
 - Run `poetry run python main.py`. If you see log messages like `Received anomaly message from pipeline`, everything works as intended.
 
 ## Configuration
-This template employs pydantic-settings for configuration handling. On startup, the following happens:
+This code employs pydantic-settings for configuration handling. On startup, the following happens:
 1. Load defaults (see `config.py`)
 2. Read settings `settings.yaml` if it exists
 3. Search through environment variables if any match configuration parameters (converted to upper_snake_case, nested levels delimited by `__`), overwriting the corresponding setting
