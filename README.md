@@ -5,6 +5,7 @@ This repository takes the results of the Starwit Awareness Engine, calls Anomaly
 ## Run in Development
 
 - go to `deployment/compose`
+- copy .env.template and rename the copy to env.sh. Check version information - the version should be the same like in pyproject.toml
 - execute `docker compose up`
 
 ## Prerequisites
@@ -30,3 +31,7 @@ This code employs pydantic-settings for configuration handling. On startup, the 
 4. Validate settings hierarchy if all necessary values are filled, otherwise Pydantic will throw a hopefully helpful error
 
 The `settings.template.yaml` should always reflect a correct and fully fledged settings structure to use as a starting point for users.
+
+## Publish Docker file
+ - use github action `docker-internal build and push (build.yaml)` in order to create a new docker version
+
