@@ -2,6 +2,11 @@
 
 This repository takes the results of the Starwit Awareness Engine, calls Anomaly Detection libs to get anomalies and send the results as AnomalyMessage to Valkey.
 
+## Run in Development
+
+- go to `deployment/compose`
+- execute `docker compose up`
+
 ## Prerequisites
 - python 3.11, you can switch between python versions with pyenv:
   - see https://github.com/pyenv/pyenv/wiki#suggested-build-environment
