@@ -2,7 +2,7 @@
 
 This repository takes the results of the Starwit Awareness Engine, calls Anomaly Detection libs to get anomalies and send the results as AnomalyMessage to Valkey.
 
-## Run in Development
+## Run for Development
 
 - go to `deployment/compose`
 - copy .env.template and rename the copy to env.sh. Check version information - the version should be the same like in pyproject.toml
