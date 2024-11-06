@@ -52,7 +52,7 @@ class TimedTrajectories:
 
             last_tracks.append(tracked_object_pos)
 
-        self.log.debug(f"Removed {border_box_count} detections on frame border.")
+        #self.log.debug(f"Removed {border_box_count} detections on frame border.")
 
         for track in last_tracks:
             id = track.get_uuid()

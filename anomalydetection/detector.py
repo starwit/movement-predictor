@@ -87,14 +87,15 @@ class Detector():
                     trajectories_dataset = makeTorchPredictionDataSet({id: tracks[id]})
 
                 with torch.no_grad():
-                    for trajectory in trajectories_dataset:
+                    for trajectory, orig_input in trajectories_dataset:
                         trajectory = trajectory.to(self.device).reshape(-1, trajectory.shape[-2], trajectory.shape[-1])
+                        orig_input = orig_input.squeeze(0)
                         target = trajectory
                         pred = self.model(target)
                         loss = criterion(pred, target)
                         if loss.item() > self.parameters["anomaly_loss_threshold"]:
                             log.info("anomaly found")
-                            anomalies.append([trajectory, id])
+                            anomalies.append([trajectory, tracks[id][orig_input[0]: orig_input[1]]])
 
                 total_anomalies += anomalies
             if self.parameters["testing"]:
@@ -110,7 +111,9 @@ class Detector():
         if len(total_anomalies) > 0:
             for anomaly in total_anomalies:
                 trajectory = anomaly_msg.trajectories.add() 
-                trajectory.CopyFrom(self._map_anomaly(anomaly[0].view(-1, anomaly[0].size(-1))))
+                #print(anomaly[1])
+                #trajectory.CopyFrom(self._map_anomaly(anomaly[1].view(-1, anomaly[1].size(-1))))
+                trajectory.CopyFrom(self._map_anomaly(anomaly[1]))
         
             if len(frames) > 0:
                 for frame in frames:
@@ -121,16 +124,37 @@ class Detector():
         return anomaly_msg
 
     def _map_anomaly(self, anomaly) -> Trajectory:
+        trajectory = Trajectory()
+
+        for track in anomaly:
+            #trajectory_point = TrajectoryPoint()
+            trajectory_point = trajectory.trajectory_points.add()
+
+            center_point = Point()
+            center_point.x = track.get_center()[0] 
+            center_point.y = track.get_center()[1]
+
+            trajectory_point.detection_center.CopyFrom(center_point)
+            trajectory_point.anomaly_trigger = True
+            trajectory_point.timestamp_utc_ms = int(track.capture_ts.timestamp() * 1000)
+        
+        #TODO: trajectory object_id, class_id
+
+        '''
         trajectory_point = TrajectoryPoint()
         center_point = Point()
-        #TODO why only anomaly[0]?
-        center_point.x = [point for point in anomaly[0]][0]
-        center_point.y = [1 - point for point in anomaly[0]][1]
+        center_point.x = [track.get_center()[0] for track in anomaly]
+        center_point.y = [1 - track.get_center()[1] for track in anomaly]
+        anomaly_trigger = [True for _ in anomaly]
+        timestamp_utc_ms = [track.capture_ts for track in anomaly]
+
         trajectory = Trajectory()
         trajectory_point = trajectory.trajectory_points.add()
         trajectory_point.detection_center.CopyFrom(center_point)
-        #TODO: timestamp_utc_ms is not set
-        #trajectory_point.timestamp_utc_ms = anomaly.timestamp_utc_ms
+        trajectory_point.anomaly_trigger.CopyFrom(anomaly_trigger)
+        trajectory_point.timestamp_utc_ms.CopyFrom(timestamp_utc_ms)
+        '''
+        #print(trajectory)
         return trajectory
 
     # TESTING WITHOUT FILTERING
