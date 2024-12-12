@@ -1,24 +1,16 @@
 import logging
-import json
-import torch
-import torch.nn as nn
 import os
 import sys
-from anomalydetection.config import AnomalyDetectionConfig
-import anomalydetection.videogeneration
-from aesanomalydetection.recurrentae.ae import LSTM_AE
-from aesanomalydetection.recurrentae.validator import plotAnomalTrajectory, plotTrajectory
-from aesanomalydetection.recurrentae.dataset import makeTorchPredictionDataSet
-from aesanomalydetection.datafilterer import DataFilterer
-from anomalydetection.modelinfocollector import ModelInfoCollector
-from visionapi.anomaly_pb2 import AnomalyMessage
-from visionapi.anomaly_pb2 import Trajectory
-from visionapi.anomaly_pb2 import TrajectoryPoint
-from visionapi.anomaly_pb2 import Point
-from pathlib import Path
-import matplotlib.pyplot as plt
-from datetime import datetime
 
+import torch
+import torch.nn as nn
+from aesanomalydetection.datafilterer import DataFilterer
+from aesanomalydetection.recurrentae.ae import LSTM_AE
+from aesanomalydetection.recurrentae.dataset import makeTorchPredictionDataSet
+from visionapi.anomaly_pb2 import AnomalyMessage, Point, Trajectory
+
+from anomalydetection.config import AnomalyDetectionConfig
+from anomalydetection.modelinfocollector import ModelInfoCollector
 
 log = logging.getLogger(__name__)
 
@@ -41,32 +33,31 @@ class Detector():
 
     def __init__(self, CONFIG: AnomalyDetectionConfig) -> None:
         log.setLevel(CONFIG.log_level.value)
-        model_info_collector = ModelInfoCollector(CONFIG)
-        self.parameters = model_info_collector.model_parameters
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = LSTM_AE(self.parameters["dimension_latent_space"]).to(self.device)
-        self.whole_video = CONFIG.whole_video
+        self._config = CONFIG
+        self._parameters = ModelInfoCollector(CONFIG).model_parameters
+        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._model = LSTM_AE(self._parameters["dimension_latent_space"]).to(self._device)
 
         try:
-            weights = torch.load(self.parameters["path_to_model"], map_location=torch.device(self.device))
+            weights = torch.load(self._config.model.weights_path, map_location=torch.device(self._device))
         except:
-            log.error(f"Model weights not found at {self.parameters['path_to_model']}")
+            log.error(f"Model weights not found at {self._config.model.weights_path}")
             exit(1)
         try:    
-            self.model.load_state_dict(weights)
+            self._model.load_state_dict(weights)
         except:
             log.error(f"Model weights do not fit model architecture LSTM_AE")
             exit(1)
 
         log.info("starting anomaly detection with parameters:")
-        for key in self.parameters.keys():
-            log.info(key + ": " + str(self.parameters[key]))
+        for key in self._parameters.keys():
+            log.info(key + ": " + str(self._parameters[key]))
       
     def filter_tracks(self, tracks):
         if len(tracks) != 0:
             tracks = [item for sublist in tracks for item in sublist]
             log.info(f"num tracks before filtering: {len(tracks)}")
-            if self.parameters["filtering"]:
+            if self._config.filtering:
                 tracks = DataFilterer().apply_filtering(tracks)
                 log.info(f"num tracks after filtering: {len(tracks)}")
             else:
@@ -77,7 +68,7 @@ class Detector():
     def examine_tracks_for_anomalies(self, tracks, frames) -> AnomalyMessage:
         total_anomalies = []
         if len(tracks) != 0:
-            criterion = nn.L1Loss(reduction='sum').to(self.device)
+            criterion = nn.L1Loss(reduction='sum').to(self._device)
 
             for id in tracks.keys():
                 anomalies=[] 
@@ -88,19 +79,16 @@ class Detector():
 
                 with torch.no_grad():
                     for trajectory, orig_input in trajectories_dataset:
-                        trajectory = trajectory.to(self.device).reshape(-1, trajectory.shape[-2], trajectory.shape[-1])
+                        trajectory = trajectory.to(self._device).reshape(-1, trajectory.shape[-2], trajectory.shape[-1])
                         orig_input = orig_input.squeeze(0)
                         target = trajectory
-                        pred = self.model(target)
+                        pred = self._model(target)
                         loss = criterion(pred, target)
-                        if loss.item() > self.parameters["anomaly_loss_threshold"]:
+                        if loss.item() > self._config.model.anomaly_loss_threshold:
                             log.info("anomaly found")
                             anomalies.append([trajectory, tracks[id][orig_input[0]: orig_input[1]]])
 
                 total_anomalies += anomalies
-            if self.parameters["testing"]:
-                #TODO move it to anomaly post processing
-                self._write_anomalies_to_filesystem(total_anomalies, tracks, frames)
 
         #TODO consider refactorying format of total_anomalies
         return self._write_anomaly_message(total_anomalies, frames)
@@ -167,38 +155,3 @@ class Detector():
             mapping[key].append(track)
         tracks = mapping
         return tracks
-
-    def _write_anomalies_to_filesystem(self, total_anomalies, tracks, frames):
-        if len(total_anomalies) > 0:
-            
-            with SuppressOutput(): 
-                trajectories_dataset = makeTorchPredictionDataSet(tracks)
-            for batch in trajectories_dataset:
-                plotTrajectory(batch.cpu().numpy(), plotArrows=False)  
-
-            for anomaly in total_anomalies:
-                plot_anomaly = anomaly[0].view(-1, anomaly[0].size(-1))
-                plotAnomalTrajectory(plot_anomaly)   
-            
-            path = "anomalies/anomaly_" + str(datetime.now())
-            os.makedirs(path, exist_ok=True)
-            plt.savefig(path + "/plot.png")
-            plt.close()
-            Detector.store_in_json(total_anomalies, path)
-
-            if self.whole_video:
-                anomalydetection.videogeneration.storeVideo(frames, path, tracks, total_anomalies, log.level) 
-            else:
-                anomalydetection.videogeneration.store_frames(frames, path, tracks, total_anomalies, log.level)   
-
-    def store_in_json(anomalies, path):
-        new_data = {}
-        for _, id in anomalies:
-            new_data[str(id)] = [] 
-        for anomal_trajectory, id in anomalies:
-            new_data[str(id)].append(anomal_trajectory.tolist())
-
-        file_path = path + "/anomal_trajectories.json"
-
-        with open(file_path, 'w') as json_file:
-            json.dump(new_data, json_file, indent=4)
