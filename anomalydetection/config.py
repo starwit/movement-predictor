@@ -10,8 +10,7 @@ class RedisConfig(BaseModel):
     host: str = 'localhost'
     port: Annotated[int, Field(ge=1, le=65536)] = 6379
     stream_id: str = 'stream1'
-    input_stream_prefix: str = 'objecttracker'
-    output_stream_prefix: str = 'anomalydetection'
+    stream_prefix: str = 'undefined'
 
 class ModelConfig(BaseModel):
     anomaly_loss_threshold: float = 0.01
@@ -20,7 +19,8 @@ class ModelConfig(BaseModel):
 
 class AnomalyDetectionConfig(BaseSettings):
     log_level: LogLevel = LogLevel.INFO
-    redis: RedisConfig = RedisConfig()
+    redisIn: RedisConfig = RedisConfig()
+    redisOut: RedisConfig = RedisConfig()
     prometheus_port: Annotated[int, Field(ge=1024, le=65536)] = 8000
     model: ModelConfig
     filtering: bool = True

@@ -1,19 +1,25 @@
 nameOverride: ""
 fullnameOverride: ""
+imageCredentials:
+  registry: docker.internal.starwit-infra.de
+image:
+  repository: docker.internal.starwit-infra.de/sae-anomaly-detection
+config:
+  redisIn:
+    stream_id: stream1
+    host: valkey-primary
+    port: 6379
+    stream_prefix: objecttracker
+  redisOut:
+    stream_id: stream1
+    host: valkey-primary
+    port: 6379
+    stream_prefix: anomalydetection
+  filtering: True
+  model:
+    anomaly_loss_threshold: 0.8
+    parameters_path: model/parameters.json
+    weights_path: model/best_model_weights_8dim.pth
+  prometheus_port: 8000
 
-anomalyDetection:
-  image:
-    repository: docker.internal.starwit-infra.de/sae-anomaly-detection
-    tag: 0.1.0
-  stream_id: stream1
-  config:
-    log_level: DEBUG
-    path_to_model_config: anomalydetection/parameters.json
-    whole_video: False
-
-anomalyPostProcessing:
-  image:
-    repository: docker.internal.starwit-infra.de/anomaly-post-processing
-    tag: 0.1.0
-  stream_id: stream1
 
