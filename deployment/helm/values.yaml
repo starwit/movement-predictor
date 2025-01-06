@@ -1,5 +1,5 @@
-nameOverride: ""
-fullnameOverride: ""
+nameOverride: "anomaly-detection"
+fullnameOverride: "anomaly-detection"
 imageCredentials:
   registry: docker.internal.starwit-infra.de
 image:

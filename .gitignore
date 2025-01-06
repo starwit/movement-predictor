@@ -8,3 +8,5 @@ cache
 settings.yaml
 .python-version
 anomalies/*
+deployment/helm/local.env.sh
+deployment/helm/customvalues.yaml
