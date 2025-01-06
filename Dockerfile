@@ -1,4 +1,4 @@
-FROM python:3.10-slim as build
+FROM python:3.11-slim as build
 
 RUN apt update && apt install --no-install-recommends -y \
     curl \
@@ -24,12 +24,12 @@ RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
 
 # Copy the rest of the project
 COPY . /code/
-RUN poetry run python test.py
+RUN poetry run python test.py --log=DEBUG
 
 
 ### Main artifact / deliverable image
 
-FROM python:3.10-slim
+FROM python:3.11-slim
 RUN apt update && apt install --no-install-recommends -y \
     libglib2.0-0 \
     libgl1 \
