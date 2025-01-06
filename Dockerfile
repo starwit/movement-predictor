@@ -1,4 +1,4 @@
-FROM python:3.11-slim as build
+FROM python:3.10-slim as build
 
 RUN apt update && apt install --no-install-recommends -y \
     curl \
@@ -16,11 +16,12 @@ COPY poetry.lock poetry.toml pyproject.toml /code/
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0
+    
 
 WORKDIR /code
 RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
     git config --global credential.helper store && \
-    poetry install
+    poetry install --no-root
 
 # Copy the rest of the project
 COPY . /code/
@@ -29,7 +30,7 @@ RUN poetry run python test.py --log=DEBUG
 
 ### Main artifact / deliverable image
 
-FROM python:3.11-slim
+FROM python:3.10-slim
 RUN apt update && apt install --no-install-recommends -y \
     libglib2.0-0 \
     libgl1 \
