@@ -1,4 +1,4 @@
-name: docker-internal build and push
+name: Build and publish latest image
 
 on:
   workflow_dispatch:
@@ -30,7 +30,20 @@ jobs:
       run: |
         docker build --secret id=GIT_CREDENTIALS -t docker.internal.starwit-infra.de/sae-anomaly-detection:tmp .
 
-    - name: push docker latest and versioned
+  publish_docker:
+    name: "Build and publish docker"
+    needs: build
+    runs-on: [self-hosted, linux, X64]
+
+    steps:
+    - name: Login internal docker registry
+      uses: docker/login-action@v3
+      with:
+        registry: docker.internal.starwit-infra.de
+        username: ${{ secrets.DOCKER_INTERNAL_USERNAME }}
+        password: ${{ secrets.DOCKER_INTERNAL_PASSWORD }}
+
+    - name: push docker versioned
       run: |
         DOCKER_VERSION=$(cat pyproject.toml | grep "version" | cut -d'=' -f2 | xargs echo -n)
         docker tag docker.internal.starwit-infra.de/sae-anomaly-detection:tmp docker.internal.starwit-infra.de/sae-anomaly-detection:$DOCKER_VERSION
