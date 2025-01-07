@@ -34,4 +34,4 @@ jobs:
     steps:
       - name: docker cleanup
         run: |
-          docker system prune -af
+          docker buildx prune -af
