@@ -41,3 +41,14 @@ jobs:
         DOCKER_VERSION=$(cat pyproject.toml | grep "version" | cut -d'=' -f2 | xargs echo -n)
         docker tag docker.internal.starwit-infra.de/sae-anomaly-detection:tmp docker.internal.starwit-infra.de/sae-anomaly-detection:$DOCKER_VERSION
         docker push docker.internal.starwit-infra.de/sae-anomaly-detection:$DOCKER_VERSION
+
+  cleanup:
+    name: "Clean docker"
+    needs: [publish_docker, build ] 
+    runs-on: [self-hosted, linux, X64]
+    if: always()
+
+    steps:
+      - name: docker cleanup
+        run: |
+          docker system prune -a

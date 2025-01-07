@@ -3,7 +3,7 @@ fullnameOverride: "anomaly-detection"
 imageCredentials:
   registry: docker.internal.starwit-infra.de
 image:
-  repository: docker.internal.starwit-infra.de/sae-anomaly-detection
+  repository: docker.internal.starwit-infra.de/anomaly-detection
 config:
   redisIn:
     stream_id: stream1
