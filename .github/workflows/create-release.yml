@@ -137,4 +137,4 @@ jobs:
       working-directory: deployment/helm
       run: |
         HELM_VERSION=$(cat ../../pyproject.toml | grep "version" | cut -d'=' -f2 | xargs echo -n)
-        curl -i --fail-with-body -u chartmuseum:${{ secrets.HELM_INTERNAL_PASSWORD }} --data-binary "@anomaly-detection-$HELM_VERSION.tgz" https://helm.internal.starwit-infra.de/api/charts
+        curl -i --fail-with-body -u chartmuseum:${{ secrets.HELM_INTERNAL_PASSWORD }} --data-binary "@sae-anomaly-detection-$HELM_VERSION.tgz" https://helm.internal.starwit-infra.de/api/charts

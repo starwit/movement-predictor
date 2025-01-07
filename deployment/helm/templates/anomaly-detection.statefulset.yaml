@@ -1,4 +1,4 @@
-{{- $imageRepo := required "image repository for anomaly-detection is required" .Values.image.repository }}
+{{- $imageRepo := required "image repository for sae-anomaly-detection is required" .Values.image.repository }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -14,7 +14,7 @@ spec:
   template:
     metadata:
       annotations:
-        starwit.de/stage: anomaly-detection
+        starwit.de/stage: sae-anomaly-detection
       labels:
         {{- include "selectorLabels" $ | nindent 8 }}
         app.kubernetes.io/component: {{ include "fullname" $ }}
@@ -40,7 +40,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: anomaly-detection-config
+            name: sae-anomaly-detection-config
       {{- with $.Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
