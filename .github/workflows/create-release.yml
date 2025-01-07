@@ -116,7 +116,7 @@ jobs:
     steps:
       - name: docker cleanup
         run: |
-          docker system prune -a
+          docker system prune -af
 
   publish_helm:
     name: "Publish helm chart"
