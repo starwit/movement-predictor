@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "anomalydetection"
-version = "0.2.8"
+version = "0.2.9"
 description = ""
 authors = ["flonix8 <flstanek@googlemail.com>"]
 license = "AGPLv3"
