@@ -1,0 +1,1 @@
+![Approach Visualization](docs/ApproachVisualization.pdf)
