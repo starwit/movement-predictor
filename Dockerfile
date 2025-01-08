@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /code
 RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
     git config --global credential.helper store && \
-    poetry install --no-root
+    poetry install
 
 # Copy the rest of the project
 COPY . /code/
