@@ -51,13 +51,13 @@ def storeParameter(threshold):
 
 def main():
 
-    trackedObjects = getTrackedBaseData(config.path_sae_data)
-    return
+    # TODO: frames in getTrackedBaseData herunterskalieren und speichern, aktuell: im Dataloader, kleinere Bildgröße verwenden
+    trackedObjects = getTrackedBaseData(config.path_sae_data)           # 1'220'175 it
     trackedObjects = DataFilterer().apply_filtering(trackedObjects) 
 
-    #TODO: store background
-    train, val, test, background = dataset.makeTorchTrainingDataSets(trackedObjects)
-    dataset.plotDataSamples(train, 20, background)
+    train, val, test = dataset.makeTorchTrainingDataSets(trackedObjects, config.path_sae_data)
+    dataset.plotDataSamples(train, 20)
+    return
 
     if os.path.exists(config.path):
 

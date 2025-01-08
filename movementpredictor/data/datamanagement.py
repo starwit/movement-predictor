@@ -2,17 +2,69 @@
 from movementpredictor.config import ModelConfig
 from movementpredictor.data.trackedobjectposition import TrackedObjectPosition
 from datetime import datetime
+from tqdm import tqdm
 import psycopg2
 import logging
+import pybase64
+
+from visionapi.sae_pb2 import SaeMessage
+from visionlib.pipeline.publisher import RedisPublisher
+from visionlib import saedump
 
 log = logging.getLogger(__name__)
 
+
 def getTrackedBaseData(path) -> list[TrackedObjectPosition]:
+
     try:
-        with open(path, 'rb') as file:  # binary data
-            ...
+        extracted_tracks = [] 
+
+        with open(path, 'r') as input_file:
+            messages = saedump.message_splitter(input_file)
+
+            start_message = next(messages)
+            dump_meta = saedump.DumpMeta.model_validate_json(start_message)
+            print(f'Starting playback from file {path} containing streams {dump_meta.recorded_streams}')
+
+            for count, message in tqdm(enumerate(messages)):
+                if count == 10000:
+                    break
+
+                event = saedump.Event.model_validate_json(message)
+                proto_bytes = pybase64.standard_b64decode(event.data_b64)
+
+                proto = SaeMessage()
+                proto.ParseFromString(proto_bytes)
+
+                detections = proto.detections
+                for detection in detections:
+
+                    if detection.class_id == 2: # only cars for now
+                        track = TrackedObjectPosition()
+                        track.set_capture_ts(proto.frame.timestamp_utc_ms)
+                        track.set_uuid(detection.object_id)
+                        track.set_class_id(detection.class_id)
+                        track.set_frame_idx(count+1)
+                        bbox = detection.bounding_box
+                        track.set_center([bbox.min_x + (bbox.max_x-bbox.min_x)/2, bbox.min_y + (bbox.max_y-bbox.min_y)/2])
+                        track.set_bbox([[bbox.min_x, bbox.min_y], [bbox.max_x, bbox.max_y]])
+                        extracted_tracks.append(track)
+
+        #return frames, extracted_tracks
+        return extracted_tracks
+
     except Exception as e:
-        log.error(e)
+
+        print(f"Error processing the file: {e}")
+        return None
+                    
+
+
+    #try:
+     #   with open(path, 'rb') as file:  # binary data
+      #      ...
+    #except Exception as e:
+     #   log.error(e)
 
     #dm = DataManager()
     #dm.connectToDB()
