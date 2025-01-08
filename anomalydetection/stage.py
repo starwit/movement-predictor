@@ -52,8 +52,6 @@ def run_stage():
             if stream_key is None:
                 continue
 
-            stream_id = stream_key.split(':')[1]
-
             FRAME_COUNTER.inc()
 
             output_proto_data = anomaly_detection.get(proto_data)
@@ -62,4 +60,4 @@ def run_stage():
                 continue
 
             with REDIS_PUBLISH_DURATION.time():
-                publish(f'{CONFIG.redisOut.stream_prefix}:{stream_id}', output_proto_data)
+                publish(f'{CONFIG.redisOut.stream_prefix}:{CONFIG.redisOut.stream_id}', output_proto_data)
