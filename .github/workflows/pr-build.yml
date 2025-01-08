@@ -34,5 +34,5 @@ jobs:
     steps:
       - name: docker cleanup
         run: |
-          docker rmi $(docker images --filter "dangling=true" -q --no-trunc)
           docker buildx prune -af
+          docker rmi docker.internal.starwit-infra.de/sae-anomaly-detection:tmp
