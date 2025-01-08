@@ -7,9 +7,9 @@ from movementpredictor.data.trackedobjectposition import TrackedObjectPosition
 class DataFilterer:
     log = logging.getLogger(__name__)
     max_angle_change = 60
-    max_seconds_between_3_detections = 2
+    max_millisec_between_3_detections = 2000
 
-    def apply_filtering(self, tracking_list) -> Dict[str, list[TrackedObjectPosition]]:
+    def apply_filtering(self, tracking_list: list[TrackedObjectPosition]) -> Dict[str, list[TrackedObjectPosition]]:
         self.log.debug("Start filtering tracks")
         mapping = {}
 
@@ -45,14 +45,12 @@ class DataFilterer:
                 #if skip:
                 #    continue
 
-                if float (track.capture_ts.timestamp()) - float (prev_prev_track.capture_ts.timestamp()) \
-                    <= DataFilterer.max_seconds_between_3_detections:
+                if track.capture_ts - prev_prev_track.capture_ts <= DataFilterer.max_millisec_between_3_detections:
                     angle_change = DataFilterer.get_angle_diff(track, prev_track, prev_prev_track)
                     if angle_change < DataFilterer.max_angle_change:
                         trajectory_angle = DataFilterer.get_angle(track, prev_prev_track)
                         if trajectory_angle == -1:
                             continue
-                        track.set_trajectory_angle(trajectory_angle)
                         if prev_prev_track not in updated_tracks:
                             updated_tracks.append(prev_prev_track)
                         if prev_track not in updated_tracks:
@@ -61,7 +59,7 @@ class DataFilterer:
                             updated_tracks.append(track)
                 else: 
                     break
-            new_mapping[key] = updated_tracks     
+            new_mapping[key] = updated_tracks  
 
         return new_mapping
 
