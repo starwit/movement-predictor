@@ -116,7 +116,7 @@ jobs:
     steps:
       - name: docker cleanup
         run: |
-          docker buildx prune -af
+          docker buildx prune -af --filter=until=1m
           DOCKER_VERSION=$(cat pyproject.toml | grep "version" | cut -d'=' -f2 | xargs echo -n)
           docker rmi docker.internal.starwit-infra.de/sae-anomaly-detection:tmp
           docker rmi docker.internal.starwit-infra.de/sae-anomaly-detection:$DOCKER_VERSION
