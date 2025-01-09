@@ -3,7 +3,9 @@ FROM python:3.11-slim as build
 RUN apt update && apt install --no-install-recommends -y \
     curl \
     git \
-    build-essential
+    build-essential \
+    libgl1-mesa-glx \
+    libglib2.0-0
 
 ARG POETRY_VERSION
 ENV POETRY_HOME=/opt/poetry
@@ -12,11 +14,6 @@ ENV PATH="${POETRY_HOME}/bin:${PATH}"
 
 # Copy only files that are necessary to install dependencies
 COPY poetry.lock poetry.toml pyproject.toml /code/
-
-RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
-    libglib2.0-0
-    
 
 WORKDIR /code
 RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
