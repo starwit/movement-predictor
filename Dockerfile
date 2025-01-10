@@ -11,14 +11,12 @@ ARG POETRY_VERSION
 ENV POETRY_HOME=/opt/poetry
 RUN curl -sSL https://install.python-poetry.org | python3 -
 ENV PATH="${POETRY_HOME}/bin:${PATH}"
-ENV POETRY_CACHE_DIR=/tmp/poetry_cache
 
 # Copy only files that are necessary to install dependencies
 COPY poetry.lock poetry.toml pyproject.toml /code/
 
 WORKDIR /code
 RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
-    --mount=type=cache,target=${POETRY_CACHE_DIR} \
     git config --global credential.helper store && \
     poetry install
 
