@@ -1,6 +1,7 @@
 [tool.poetry]
+package-mode = false
 name = "anomalydetection"
-version = "0.2.0"
+version = "0.2.11"
 description = ""
 authors = ["flonix8 <flstanek@googlemail.com>"]
 license = "AGPLv3"
@@ -16,7 +17,7 @@ visionlib = { git = "https://github.com/starwit/vision-lib.git", subdirectory = 
 aesanomalydetection = { git = "https://github.com/starwit/ae-trajectories.git", branch = "main" }
 redis = "^5.0.0"
 pydantic-settings = "^2.0.3"
-prometheus-client = "^0.17.1"
+prometheus-client = "0.20.0"
 opencv-python = "^4.10.0.84"
 tqdm = "^4.66.4"
 matplotlib = "^3.9.0"

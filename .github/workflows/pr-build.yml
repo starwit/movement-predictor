@@ -24,3 +24,15 @@ jobs:
         GIT_CREDENTIALS: https://starwit:${{ secrets.VISION_PIPELINE_READ_TOKEN }}@github.com
       run: |
         docker build --secret id=GIT_CREDENTIALS -t docker.internal.starwit-infra.de/sae-anomaly-detection:tmp .
+
+  cleanup:
+    name: "Clean docker"
+    needs: [ build ] 
+    runs-on: [self-hosted, linux, X64]
+    if: always()
+
+    steps:
+      - name: docker cleanup
+        run: |
+          docker buildx prune -af
+          docker rmi docker.internal.starwit-infra.de/sae-anomaly-detection:tmp

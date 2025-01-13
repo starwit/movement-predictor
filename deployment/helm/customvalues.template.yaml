@@ -1,0 +1,13 @@
+imageCredentials:
+  registry: docker.internal.starwit-infra.de
+  username: docker
+  password: #password to set
+config:
+  redisIn:
+    stream_id: stream1
+    host: valkey-primary
+    port: 6379
+  redisOut:
+    stream_id: stream1
+    host: valkey-primary
+    port: 6379

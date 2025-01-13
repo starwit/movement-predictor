@@ -1,51 +1,35 @@
-{{- with .Values.anomalyDetection }}
-{{- $imageRepo := required "image repository for anomaly-detection is required" .image.repository }}
-{{- $imageTag := required "image tag for anomaly-detection is required" .image.tag }}
-{{- $config := . }}
-{{- $streamId := .stream_id -}}
-{{- $instanceName := printf "anomaly-detection-%s" (lower .) }}
+{{- $imageRepo := required "image repository for sae-anomaly-detection is required" .Values.image.repository }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "ande.fullname" $ }}-{{ $instanceName }}
+  name: {{ include "fullname" $ }}
   labels:
-    {{- include "ande.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: {{ $instanceName }}
+    {{- include "labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ include "fullname" $ }}
 spec:
   selector:
     matchLabels:
-      {{- include "ande.selectorLabels" $ | nindent 6 }}
-      app.kubernetes.io/component: {{ $instanceName }}
+      {{- include "selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ include "fullname" $ }}
   template:
     metadata:
       annotations:
-        ande.starwit.de/stage: anomaly-detection
+        starwit.de/stage: sae-anomaly-detection
       labels:
-        {{- include "ande.selectorLabels" $ | nindent 8 }}
-        app.kubernetes.io/component: {{ $instanceName }}
+        {{- include "selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ include "fullname" $ }}
     spec:
-      serviceAccountName: {{ include "ande.serviceAccountName" $ }}
+      imagePullSecrets:
+        - name: internal-docker-registry
+      serviceAccountName: {{ include "serviceAccountName" $ }}
       securityContext:
         {{- toYaml $.Values.podSecurityContext | nindent 8 }}
-      initContainers:
-        - name: wait-for-redis
-          image: valkey/valkey:7.2.6-alpine
-          command: ["sh", "-c", "while ! redis-cli -h {{ include "ande.redisServiceName" $ }} ping ; do echo \"$(date -Iseconds) - still waiting for redis\"; sleep 1; done"]
       containers:
-        - name: {{ $instanceName }}
+        - name: {{ include "fullname" $ }}
           securityContext:
             {{- toYaml $.Values.securityContext | nindent 12 }}
-          image: "{{ $imageRepo }}:{{ $imageTag }}"
+          image: "{{ $imageRepo }}:{{ include "imageTag" $ }}"
           imagePullPolicy: IfNotPresent
-          env:
-            - name: LOG_LEVEL
-              value: {{ $config.logLevel | quote }}
-            - name: REDIS__HOST
-              value: {{ include "ande.redisServiceName" $ }}
-            - name: REDIS__PORT
-              value: {{ include "ande.redisServicePort" $ }}
-            - name: REDIS__STREAM_ID
-              value: {{ $streamId | quote }}
           ports:
             - name: prometheus
               containerPort: 8000
@@ -56,7 +40,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: anomaly-detection-config
+            name: sae-anomaly-detection-config
       {{- with $.Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -70,5 +54,3 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 ---
-{{- end }}
-{{- end }}
