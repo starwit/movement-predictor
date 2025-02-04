@@ -9,16 +9,11 @@ class ModelConfig:
     def __init__(self):
         load_dotenv()
 
-        self.start_time = os.getenv("START_TIME")
-        self.end_time = os.getenv("END_TIME")
-        self.database_url = os.getenv("DATABASE_URL")       # IP 100.70.113.34 = infra-brain01
-        self.user = os.getenv("DATABASE_USER")
-        self.password = os.getenv("DATABASE_PASSWORD")
-        self.ssl = os.getenv("DATABASE_SSL")
-        self.database_table = os.getenv("DATABASE_TABLE")
-        self.camera_id = os.getenv("DATABASE_CAMERA_ID")
         self.path_model = os.getenv("PATH_MODEL")
         self.path_sae_data = os.getenv("PATH_SAE_DATA")
+        self.path_store_data = os.getenv("PATH_STORE_DATA")
+        self.dim_x = int(os.getenv("DIM_X"))
+        self.dim_y = int(os.getenv("DIM_Y"))
 
     @classmethod
     def get_instance(cls):

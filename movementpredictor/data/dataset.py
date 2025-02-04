@@ -1,57 +1,97 @@
 import torch
-from torch.utils.data import DataLoader, SubsetRandomSampler, Dataset
+from torch.utils.data import ConcatDataset, DataLoader, Dataset, random_split
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 import cv2
-import random
-import pybase64
-from itertools import islice
 import logging
-
-from visionapi.sae_pb2 import SaeMessage
-from visionlib.pipeline.publisher import RedisPublisher
-from visionlib import saedump
+import os
+import gc
 
 
 log = logging.getLogger(__name__)
 
 
-def makeTorchTrainingDataSets(tracks: map, path_saedump):
-    train_size = int(len(tracks)*0.5)
+def get_path(num, path_store):
+    if num % 3 == 0:
+        path = path_store + "/train_cnn"
+    elif num % 3 == 1:
+        path = path_store + "/clustering"
+    else:
+        path = path_store + "/test"
+    return path 
+
+
+def getTorchDataSet(path_store, folder:str, num_dataset:int):
+    if folder == "train_cnn":
+        path = path_store + "/train_cnn/dataset" + str(num_dataset*3) + ".pth"
+    elif folder == "clustering":
+        path = path_store + "/clustering/dataset" + str(1+num_dataset*3) + ".pth"
+    elif folder == "test":
+        path = path_store + "/test/dataset" + str(2+num_dataset*3) + ".pth"
+    else:
+        log.error("no such folder " + folder)
+    return torch.load(path)
+
+
+def merge_and_split_datasets(path_data, val_split_ratio=0.01):
+    merged_dataset = merge_datasets(path_data, "train_cnn")
+    
+    torch.manual_seed(42)
+    total_size = len(merged_dataset)
+    val_size = int(total_size * val_split_ratio)
+    train_size = total_size - val_size
+    
+    train_ds, val_ds = random_split(merged_dataset, [train_size, val_size])
+    
+    return train_ds, val_ds
+
+
+def merge_datasets(path_data, name="clustering"):
+    datasets = []
+    for part in range(4):
+        ds = getTorchDataSet(path_data, name, part)
+        datasets.append(ds)
+    
+    merged_dataset = ConcatDataset(datasets)
+    return merged_dataset
+
+
+def getTorchDataLoader(dataset, val_split=False, train=True):
     batch_size = 8
-    val_size = min(400, int(len(tracks)*0.1))
 
-    random.seed(42)
-    keys = list(tracks.keys())
-    random.shuffle(keys)
+    if val_split:
+        torch.manual_seed(42)
 
-    train_tracks = {k: tracks[k] for i, k in enumerate(keys) if i < train_size}
-    val_tracks = {k: tracks[k] for i, k in enumerate(keys) if i > len(tracks)-val_size-1}
-    test_tracks = {k: tracks[k] for i, k in enumerate(keys) if i > train_size and i < len(tracks)-val_size-1}
+        val_size = int(len(dataset)*0.02)
+        train_size = len(dataset) - val_size
+        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
-    train_dataset = extractDetections(train_tracks, path_saedump)
-    val_dataset = extractDetections(val_tracks, path_saedump)
-    test_dataset = extractDetections(test_tracks, path_saedump)
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-    return train_loader, val_loader, test_loader
+        return train_loader, val_loader
+    
+    else:
+        return DataLoader(dataset, batch_size=batch_size, shuffle=train, drop_last=True)
 
 
-def makeTorchPredictionDataSet(tracks:dict, path_saedump):
-    dataset = extractDetections(tracks, path_saedump)
-    return DataLoader(dataset, batch_size=1)
+def makeTorchDataSet(frames: dict, tracks: dict, path_store, num_batch):
+    dataset = make_input_target_pairs(frames, tracks)
+
+    path = get_path(num_batch, path_store)
+    os.makedirs(path, exist_ok=True)
+    torch.save(dataset, path + "/dataset" + str(num_batch) + ".pth")
+
+    dataset = None
+    gc.collect()
 
 
-def extractDetections(tracks: dict, path_saedump) -> Dataset:
+def make_input_target_pairs(frames: dict, tracks: dict) -> Dataset:
     time_interval_in_millisec = 1500
     prediction_step = 1000
     input_target_pairs = []
 
-    for trajectory in tqdm(tracks.values()):
+    for trajectory in tqdm(tracks.values(), desc="creating dataset"):
         if len(trajectory) == 0:
             continue
 
@@ -66,7 +106,7 @@ def extractDetections(tracks: dict, path_saedump) -> Dataset:
                         input_target_pairs.append([input_tr, get_position_after_time(ts, prediction_step)])
                     break
     
-    return CNNData(input_target_pairs, path_saedump)
+    return CNNData(frames, input_target_pairs)
 
 
 def get_position_after_time(ts, target_time):
@@ -103,7 +143,7 @@ def plotDataSamples(dataloader: DataLoader, amount: int):
         plt.title("target")
         frame_np = (frame_np * 255).astype(np.uint8)
         frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_GRAY2RGB)
-        cv2.circle(frame_rgb, [round(target[0]*frame_np.shape[1]), round(target[1]*frame_np.shape[0])], radius=4, color=(255, 0, 0), thickness=-1)
+        cv2.circle(frame_rgb, [round(target[0]), round(target[1])], radius=4, color=(255, 0, 0), thickness=-1)
         plt.imshow(frame_rgb)
         plt.imshow(mask_np, cmap='Reds', alpha=0.5, interpolation='nearest')
         plt.axis('off')
@@ -127,38 +167,19 @@ def create_mask_tensor(dim_x, dim_y, bbox):
     return tensor.T
 
 
-def create_frame_tensor(dim_x, dim_y, track, path_saedump):
-        sae_messages = saedump.message_splitter(open(path_saedump, 'r'))
-        message = next(islice(sae_messages, track.get_frame_idx(), track.get_frame_idx()+1))
-        event = saedump.Event.model_validate_json(message)
-        proto_bytes = pybase64.standard_b64decode(event.data_b64)
-        proto = SaeMessage()
-        proto.ParseFromString(proto_bytes)
-
-        frame = proto.frame
-        if frame.timestamp_utc_ms != track.get_capture_ts():
-            log.error("not the correct frame: \nframe timestamp: " + str(frame.timestamp_utc_ms) 
-                      + "\ntrack timestamp: " + str(track.get_capture_ts()))
-
-        frame_data = frame.frame_data_jpeg
-        np_arr = np.frombuffer(frame_data, np.uint8)
-        img = cv2.imdecode(np_arr, cv2.IMREAD_GRAYSCALE)  
-
-        resized_img = cv2.resize(img, (dim_x, dim_y), interpolation=cv2.INTER_AREA)
-        tensor = torch.from_numpy(resized_img).float() / 255.0  
-        return tensor
-
+def create_target_tensor(dim_x, dim_y, tar_pos):
+    x, y = tar_pos
+    x, y = x*dim_x, y*dim_y
+    target = torch.tensor([x, y]).to(torch.float32)
+    return target
 
 # make the 2Dimage and target data 
 class CNNData(Dataset):
 
-    dim_x = 280
-    dim_y = 160
-
-    def __init__(self, inp_tar_pairs, path_saedump):
+    def __init__(self, frames, inp_tar_pairs):
+        self.frames = frames
         self.data = [pair[0] for pair in inp_tar_pairs]
         self.targets = [pair[1] for pair in inp_tar_pairs]
-        self.path_saedump = path_saedump
 
     def __len__(self):
         return len(self.data)
@@ -166,11 +187,11 @@ class CNNData(Dataset):
     def __getitem__(self, idx):
 
         inp_track = self.data[idx]
-        mask_tensor = create_mask_tensor(self.dim_x, self.dim_y, inp_track.get_bbox()).unsqueeze(0)
-        frame_tensor = create_frame_tensor(self.dim_x, self.dim_y, inp_track, self.path_saedump).unsqueeze(0)
+        frame_tensor = self.frames[inp_track.get_capture_ts()].unsqueeze(0)
+        mask_tensor = create_mask_tensor(frame_tensor.shape[-1], frame_tensor.shape[-2], inp_track.get_bbox()).unsqueeze(0)
         sample = torch.cat((frame_tensor, mask_tensor), dim=0).to(torch.float32)
         
         tar_pos = self.targets[idx]
-        target = torch.tensor(tar_pos).to(torch.float32)
+        target = create_target_tensor(frame_tensor.shape[-1], frame_tensor.shape[-2], tar_pos)
 
         return sample, target
