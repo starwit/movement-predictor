@@ -2,6 +2,7 @@ import logging
 from math import atan, degrees
 from typing import Dict
 from movementpredictor.data.trackedobjectposition import TrackedObjectPosition
+from tqdm import tqdm
 
 
 class DataFilterer:
@@ -30,7 +31,7 @@ class DataFilterer:
                     continue
             new_mapping[key] = tracks_of_object
 
-        for key, tracks_of_object in new_mapping.items():
+        for key, tracks_of_object in tqdm(new_mapping.items(), desc="filtering tracks"):
             updated_tracks = []
             for i in range(len(tracks_of_object) - 2):
                 prev_prev_track = tracks_of_object[i]
