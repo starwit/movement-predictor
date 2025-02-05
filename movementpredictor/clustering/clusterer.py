@@ -15,7 +15,9 @@ from movementpredictor.cnn import inferencing
 
 def plot_input_target_output(x, y, mu, sigma):
     frame_np = x[0].cpu().numpy()
-    mask_np = x[1].cpu().numpy()
+    mask_others_np = x[1].cpu().numpy()
+    mask_interest_np = x[2].cpu().numpy()
+
     target = y.cpu().numpy()
 
     plt.figure(figsize=(22, 7))
@@ -23,7 +25,8 @@ def plot_input_target_output(x, y, mu, sigma):
     plt.subplot(1, 3, 1)
     plt.title("input")
     plt.imshow(frame_np, cmap='gray', interpolation='nearest')
-    plt.imshow(mask_np, cmap='Reds', alpha=0.5, interpolation='nearest')
+    plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
+    plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
     plt.axis('off')
 
     plt.subplot(1, 3, 2)
@@ -32,9 +35,9 @@ def plot_input_target_output(x, y, mu, sigma):
     frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_GRAY2RGB)
     cv2.circle(frame_rgb, [round(target[0]), round(target[1])], radius=4, color=(255, 0, 0), thickness=-1)
     plt.imshow(frame_rgb)
-    plt.imshow(mask_np, cmap='Reds', alpha=0.5, interpolation='nearest')
+    plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
+    plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
     plt.axis('off')
-
 
     plt.subplot(1, 3, 3)
     plt.title("prediction")
@@ -62,7 +65,8 @@ def plot_input_target_output(x, y, mu, sigma):
     )
 
     plt.imshow(frame_rgb)
-    plt.imshow(mask_np, cmap='Reds', alpha=0.5, interpolation='nearest')
+    plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
+    plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
     plt.axis('off')
 
 
@@ -84,7 +88,7 @@ def visualValidation(model, path_data) -> None:
             plt.close()
 
 
-def output_distribution(probs, var_size, percentage_p=0.01, percentage_var=99.99999):
+def output_distribution(probs, var_size, percentage_p=0.01, percentage_var=99.999):
     '''computes the thresholds for finding an anomaly based on the probability density and variance'''
 
     threshold_probs = np.percentile(probs, percentage_p)
@@ -125,8 +129,8 @@ def plot_unlikely_samples(path_data, threshold_probs, threshold_vars, probs, var
 
     os.makedirs("plots/anomalies", exist_ok=True)
     for i, (x, target) in tqdm(enumerate(test)):
-        #if i >= 5000:
-         #   break
+       # if i >= 5000:
+        #    break
         for mu, cov, inp, pos, p, var_s in zip(mus[i], covs[i], x, target, probs[i], var_size[i]):
             if p < threshold_probs:
                 count += 1

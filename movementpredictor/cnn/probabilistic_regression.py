@@ -91,90 +91,6 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
   return model, history
 
 
-def trainAndStoreCNN_(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[float]]]: 
-  device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-  model = CNN()
-  #model = EfficientNetRegressionWithUncertainty()
-  model.to(device)
-
-  optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
-  criterion = nll_loss
-  scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
-  history = dict(train=[], val=[])
-  best_model_wts = copy.deepcopy(model.state_dict())
-  best_loss = 10000.0
-
-  model = model.train()
-  train_losses = []
-  val_losses = []
-
-  for epoch in range(100):
-
-    for part in range(4):   
-
-      no_improvement = 0
-      train = None
-      ds = dataset.getTorchDataSet(path_data, "train_cnn", part)
-      if part == 0:
-         train, val = dataset.getTorchDataLoader(ds, val_split=True)
-      else: 
-         train = dataset.getTorchDataLoader(ds)
-
-      print("part ", part)
-      print("train size: ", len(train))
-      print("val size: ", len(val))
-
-      for count, (input, target) in tqdm(enumerate(train)):
-        optimizer.zero_grad()
-        target = target.to(device)
-        input = input.to(device)
-        mu, sigma = model(input)
-        loss = criterion(target, mu, sigma)
-        loss.backward()
-        optimizer.step()
-        train_losses.append(loss.item())
-        
-        if (count+1) % 10000 == 0:  # check after 10000 batches
-          model = model.eval()
-          with torch.no_grad():
-            for input, target in val:
-              target = target.to(device)
-              input = input.to(device)
-              mu, sigma = model(input)
-              loss = criterion(target, mu, sigma)
-              val_losses.append(loss.item())
-          
-          train_loss = np.mean(train_losses)
-          val_loss = np.mean(val_losses)
-          history['train'].append(train_loss)
-          history['val'].append(val_loss)
-          print("iteration " + str(count), "- train_loss=" + str(train_loss) + " - val_loss=" + str(val_loss))
-          if val_loss < best_loss:
-            best_loss = val_loss
-            best_model_wts = copy.deepcopy(model.state_dict())
-            torch.save(best_model_wts, path_model)
-            no_improvement = 0
-          else: 
-            print("no improvement")
-            no_improvement += 1
-
-          if no_improvement > 12: 
-            break
-          
-          model = model.train()
-          scheduler.step(val_loss)
-          train_losses = []
-          val_losses = []
-
-    if no_improvement > 10:
-      break
-
-  model.load_state_dict(best_model_wts)
-  model.eval()
-
-  return model, history
-
-
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         super(ResidualBlock, self).__init__()
@@ -201,7 +117,7 @@ class CNN(nn.Module):
         super(CNN, self).__init__()
         
         self.layer1 = nn.Sequential(
-            nn.Conv2d(2, 64, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU()
         )
@@ -262,25 +178,6 @@ class CNN(nn.Module):
         return mu, sigma
 
 
-
-# Loss function: Negative Log-Likelihood (NLL)
-def nll_loss_(y_true, mu, sigma):
-    # Error term: (y_true - mu)
-    error = (y_true - mu).unsqueeze(2)  # Shape (batch_size, 2, 1)
-    
-    # Mahalanobis distance term
-    epsilon = 1e-4
-    sigma_stable = sigma + epsilon * torch.eye(sigma.size(-1)).to(sigma.device)
-    log_det = torch.logdet(sigma_stable)
-    sigma_inv = torch.inverse(sigma_stable)  # Inverse of covariance matrix
-    mahalanobis = torch.bmm(torch.bmm(error.transpose(1, 2), sigma_inv), error)
-    
-    # NLL Loss
-    loss = mahalanobis.squeeze() + 0.5*log_det
-    
-    return loss.mean()
-
-
 def nll_loss(y_true, mu, sigma):
     """
     Negative Log-Likelihood (NLL) Loss mit Regularisierung für die Kovarianzmatrix.
@@ -307,7 +204,7 @@ def nll_loss(y_true, mu, sigma):
     mahalanobis = torch.bmm(torch.bmm(error.transpose(1, 2), sigma_inv), error)
     
     # NLL Loss: Mahalanobis-Distanz + log(det(sigma)) + Regularisierung
-    loss = mahalanobis.squeeze() + 0.1 * log_det + 0.1 * reg_term
+    loss = mahalanobis.squeeze() + 0.1 * log_det + 0.05 * reg_term
 
     return loss.mean()
     

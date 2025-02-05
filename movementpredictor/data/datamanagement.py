@@ -13,12 +13,50 @@ from visionlib import saedump
 log = logging.getLogger(__name__)
 
 
-def getTrackedBaseData(path, dim_x, dim_y, num_batch) -> list[TrackedObjectPosition]:
+def get_downsampled_tensor_img(frame, dim_x, dim_y):
 
+    frame_data = frame.frame_data_jpeg
+    np_arr = np.frombuffer(frame_data, np.uint8)
+    img = cv2.imdecode(np_arr, cv2.IMREAD_GRAYSCALE)  
+    resized_img = cv2.resize(img, (dim_x, dim_y), interpolation=cv2.INTER_AREA)
+    tensor_img = torch.from_numpy(resized_img).float() / 255.0
+
+    return tensor_img
+
+
+def get_background_frame(path, dim_x, dim_y):
+    # TODO: choose frame with least amount of detections and good quality
+    try:
+        tensor_img = None
+
+        with open(path, 'r') as input_file:
+            messages = saedump.message_splitter(input_file)
+
+            start_message = next(messages)
+            saedump.DumpMeta.model_validate_json(start_message)
+
+            for count, message in tqdm(enumerate(messages)):
+                event = saedump.Event.model_validate_json(message)
+                proto_bytes = pybase64.standard_b64decode(event.data_b64)
+
+                proto = SaeMessage()
+                proto.ParseFromString(proto_bytes)
+
+            #    if len(proto.detections) < 10:
+                tensor_img = get_downsampled_tensor_img(proto.frame, dim_x, dim_y)
+                return tensor_img
+
+            #return get_downsampled_tensor_img(proto.frame, dim_x, dim_y)
+    
+    except Exception as e:
+
+        print(f"Error processing the file: {e}")
+        return None
+
+
+def getTrackedBaseData(path, num_batch) -> list[TrackedObjectPosition]:
     try:
         extracted_tracks = [] 
-        downsampled_frames = {}
-
         with open(path, 'r') as input_file:
             messages = saedump.message_splitter(input_file)
 
@@ -33,21 +71,11 @@ def getTrackedBaseData(path, dim_x, dim_y, num_batch) -> list[TrackedObjectPosit
                  #   break
 
                 if  count >= num_batch*100000 and (count < (num_batch+1)*100000 or num_batch == 11):
-                    
                     event = saedump.Event.model_validate_json(message)
                     proto_bytes = pybase64.standard_b64decode(event.data_b64)
 
                     proto = SaeMessage()
                     proto.ParseFromString(proto_bytes)
-
-                    frame = proto.frame
-                    frame_data = frame.frame_data_jpeg
-                    np_arr = np.frombuffer(frame_data, np.uint8)
-                    img = cv2.imdecode(np_arr, cv2.IMREAD_GRAYSCALE)  
-
-                    resized_img = cv2.resize(img, (dim_x, dim_y), interpolation=cv2.INTER_AREA)
-                    tensor_img = torch.from_numpy(resized_img).float() / 255.0
-                    downsampled_frames[frame.timestamp_utc_ms] = tensor_img
 
                     detections = proto.detections
 
@@ -56,7 +84,7 @@ def getTrackedBaseData(path, dim_x, dim_y, num_batch) -> list[TrackedObjectPosit
                         if detection.class_id == 2: # only cars for now
 
                             track = TrackedObjectPosition()
-                            track.set_capture_ts(frame.timestamp_utc_ms)
+                            track.set_capture_ts(proto.frame.timestamp_utc_ms)
                             track.set_uuid(detection.object_id)
                             track.set_class_id(detection.class_id)
                             bbox = detection.bounding_box
@@ -67,7 +95,7 @@ def getTrackedBaseData(path, dim_x, dim_y, num_batch) -> list[TrackedObjectPosit
                 if count >= (num_batch+1)*100000:
                     break
 
-        return downsampled_frames, extracted_tracks
+        return extracted_tracks
 
     except Exception as e:
 
