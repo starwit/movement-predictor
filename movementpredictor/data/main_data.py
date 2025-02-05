@@ -1,4 +1,4 @@
-from movementpredictor.data.datamanagement import getTrackedBaseData
+from movementpredictor.data.datamanagement import getTrackedBaseData, get_background_frame
 from movementpredictor.data.datafilterer import DataFilterer
 from movementpredictor.config import ModelConfig
 from movementpredictor.data import dataset
@@ -12,15 +12,15 @@ config = ModelConfig()
 
 def main():
 
+    background_frame = get_background_frame(config.path_sae_data, config.dim_x, config.dim_y)
+    dataset.store_frame(background_frame, config.path_store_data)
+
     for i in range(12):
-        frames_dict, trackedObjects = getTrackedBaseData(config.path_sae_data, config.dim_x, config.dim_y, i)           # 1'220'175 it in total
+        trackedObjects = getTrackedBaseData(config.path_sae_data, i)           # 1'220'175 it in total
         trackedObjects = DataFilterer().apply_filtering(trackedObjects) 
 
-        dataset.makeTorchDataSet(frames_dict, trackedObjects, config.path_store_data, i)
-        frames_dict, trackedObjects = None, None
-        trackedObjects = None
-        gc.collect()
-
+        dataset.store_data(trackedObjects, config.path_store_data, i)
+        
     train_ds = dataset.getTorchDataSet(config.path_store_data, "train_cnn", 0)
     train_dl = dataset.getTorchDataLoader(train_ds)
 
