@@ -6,8 +6,8 @@ from tqdm import tqdm
 import cv2
 import logging
 import os
-import gc
 from collections import defaultdict
+import pickle
 
 
 log = logging.getLogger(__name__)
@@ -27,20 +27,24 @@ def getTorchDataSet(path_store, folder:str, num_dataset:int):
     path_frame = path_store + "/frame.pth"
 
     if folder == "train_cnn":
-        path = path_store + "/train_cnn/dataset" + str(num_dataset*3) + ".pth"
+        path = path_store + "/train_cnn/dataset" + str(num_dataset*3) + ".pkl"
     elif folder == "clustering":
-        path = path_store + "/clustering/dataset" + str(1+num_dataset*3) + ".pth"
+        path = path_store + "/clustering/dataset" + str(1+num_dataset*3) + ".pkl"
     elif folder == "test":
-        path = path_store + "/test/dataset" + str(2+num_dataset*3) + ".pth"
+        path = path_store + "/test/dataset" + str(2+num_dataset*3) + ".pkl"
     else:
         log.error("no such folder " + folder)
 
-    raw_dataset = torch.load(path)
+    with open(path, "rb") as f:
+        raw_dataset = pickle.load(f)
+    #raw_dataset = torch.load(path)
     frame = torch.load(path_frame)
 
     torch_dataset = CNNData(frame, raw_dataset)
 
     return torch_dataset
+
+
 
 
 def merge_and_split_datasets(path_data, val_split_ratio=0.01):
@@ -94,7 +98,9 @@ def store_data(tracks: dict, path_store, num_batch):
     path = get_path(num_batch, path_store)
     os.makedirs(path, exist_ok=True)
 
-    torch.save(dataset, path + "/dataset" + str(num_batch) + ".pth")
+    with open(path + "/dataset" + str(num_batch) + ".pkl", "wb") as f:
+        pickle.dump(dataset, f)
+    #torch.save(dataset, path + "/dataset" + str(num_batch) + ".pth")
 
 
 def make_input_target_pairs(tracks: dict) -> Dataset:
@@ -126,11 +132,13 @@ def make_input_target_pairs(tracks: dict) -> Dataset:
         other_vehicles = timestamp_dict[inp.get_capture_ts()]
         bboxs = [vehicle.get_bbox() for vehicle in other_vehicles]
 
-        bboxs_tensor = torch.Tensor(bboxs).to(torch.float32)
-        input_tensor = torch.Tensor(inp.get_bbox()).to(torch.float32)
-        target_tensor = torch.Tensor(tar).to(torch.float32)
+        bboxs_tensor = np.array(bboxs, dtype=np.float32)
+        input_tensor = np.array(inp.get_bbox(), dtype=np.float32)
+        target_tensor = np.array(tar, dtype=np.float32)
+        frame_ts = np.str_(inp.get_capture_ts())
+        obj_id = np.str_(inp.get_uuid())
 
-        input_target_pairs[i] = [bboxs_tensor, input_tensor, target_tensor]
+        input_target_pairs[i] = [bboxs_tensor, input_tensor, target_tensor, frame_ts, obj_id]
     
     return input_target_pairs
 
@@ -150,7 +158,7 @@ def get_position_after_time(ts, target_time):
 
 def plotDataSamples(dataloader: DataLoader, amount: int):
 
-    for count, (sample_batch, target_batch) in enumerate(dataloader):
+    for count, (sample_batch, target_batch, _, _) in enumerate(dataloader):
         if count >= amount: break
 
         sample, target = sample_batch[0], target_batch[0]
@@ -174,7 +182,7 @@ def plotDataSamples(dataloader: DataLoader, amount: int):
         plt.title("target")
         frame_np = (frame_np * 255).astype(np.uint8)
         frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_GRAY2RGB)
-        cv2.circle(frame_rgb, [round(target[0]), round(target[1])], radius=4, color=(255, 0, 0), thickness=-1)
+        cv2.circle(frame_rgb, [round(target[0]*frame_np.shape[-1]), round(target[1]*frame_np.shape[-2])], radius=2, color=(255, 0, 0), thickness=-1)
         plt.imshow(frame_rgb)
         plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
         plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
@@ -184,16 +192,24 @@ def plotDataSamples(dataloader: DataLoader, amount: int):
         plt.close()
 
 
-def create_mask_tensor(dim_x, dim_y, bboxs):
+def create_mask_tensor(dim_x, dim_y, bboxs, scale=True):
     tensor = torch.zeros((dim_x, dim_y))
-
+    
     for bbox in bboxs:
         [x_min, y_min], [x_max, y_max] = bbox
 
-        x_min_idx = int(x_min * dim_x)
-        x_max_idx = int(x_max * dim_x)
-        y_min_idx = int(y_min * dim_y)
-        y_max_idx = int(y_max * dim_y)
+        if scale:
+            x_min_idx = int(x_min * dim_x)
+            x_max_idx = int(x_max * dim_x)
+            y_min_idx = int(y_min * dim_y)
+            y_max_idx = int(y_max * dim_y)
+        else:
+            x_min_idx, x_max_idx, y_min_idx, y_max_idx = x_min, x_max, y_min, y_max
+
+        if x_max_idx-x_min_idx < 1:
+            x_max_idx = x_min_idx + 1
+        if y_max_idx-y_min_idx < 1:
+            y_max_idx = y_min_idx + 1
 
         tensor[x_min_idx:x_max_idx, y_min_idx:y_max_idx] = 1
 
@@ -214,6 +230,8 @@ class CNNData(Dataset):
         self.other_vehicles = [item[0] for item in inp_tar_list]
         self.objects_of_interest = [item[1] for item in inp_tar_list]
         self.targets = [item[2] for item in inp_tar_list]
+        self.frame_timestamps = [item[3] for item in inp_tar_list]
+        self.ids = [item[4] for item in inp_tar_list]
 
     def __len__(self):
         return len(self.objects_of_interest)
@@ -223,6 +241,8 @@ class CNNData(Dataset):
         inp_track = self.objects_of_interest[idx]
         other_bboxs = self.other_vehicles[idx]
         tar_pos = self.targets[idx]
+        frame_ts = self.frame_timestamps[idx]
+        obj_id = self.ids[idx]
 
         #frame_tensor = self.frames[inp_track.get_capture_ts()].unsqueeze(0)
         shape = (self.frame.shape[-1], self.frame.shape[-2])
@@ -230,7 +250,7 @@ class CNNData(Dataset):
         mask_tensor_interest = create_mask_tensor(shape[0], shape[1], [inp_track]).unsqueeze(0)
         sample = torch.cat((self.frame.unsqueeze(0), mask_tensor_others, mask_tensor_interest), dim=0).to(torch.float32)
         
-        
-        target = create_target_tensor(shape[0], shape[1], tar_pos)
+        #target = create_target_tensor(shape[0], shape[1], tar_pos)
+        target = torch.tensor(tar_pos).to(torch.float32)
 
-        return sample, target
+        return sample, target, frame_ts, obj_id
