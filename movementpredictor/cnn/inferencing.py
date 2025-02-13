@@ -6,21 +6,23 @@ import numpy as np
 from movementpredictor.data import dataset
 
 
-def inference_with_prob_calculation(model, path_data: str, folder:str):
+def inference_with_stats(model, path_data: str, folder:str):
     # TODO: possiblity to also store targets and input masks
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     probs = []
     var_size = []
     mus, covs = [], []
+    inputs, targets = [], []
+    tss, ids = [], []
 
     with torch.no_grad():
         ds = dataset.merge_datasets(path_data, folder)
         test = dataset.getTorchDataLoader(ds, train=False)
         print(len(test))
 
-        for i, (x, target) in tqdm(enumerate(test)):
-            #if i > 5000:
+        for i, (x, target, ts, id) in tqdm(enumerate(test)):
+            #if i == 10000:
              #   break
             x = torch.tensor(x).to(device)
 
@@ -28,10 +30,15 @@ def inference_with_prob_calculation(model, path_data: str, folder:str):
             mu_batch, cov_batch = mu_batch.detach().cpu().numpy(), cov_batch.detach().cpu().numpy()
             mus.append(mu_batch)
             covs.append(cov_batch)
+            targets.append(target)
+            tss.append(ts)
+            ids.append(id)
+            inputs.append(get_bounding_box_info(x))
 
             for mu, cov, pos in zip(mu_batch, cov_batch, target):
                 # for getting a measure of the likeliness of the target given the predicted normal distribution, the cdf is used
-                cov = cov + 1e-4 * np.eye(2)     # ensure pos. sem. definit
+                #cov = cov + 1e-4 * np.eye(2)     # ensure pos. sem. definit
+                cov = regularize_cov(cov)
                 p = multivariate_normal.cdf(pos, mean=mu, cov=cov)
                 prob = min(p, 1-p)
 
@@ -39,84 +46,31 @@ def inference_with_prob_calculation(model, path_data: str, folder:str):
                 variance = np.array([np.diag(v).sum() for v in cov]).sum()
                 var_size.append(variance)
 
-    return probs, var_size, mus, covs
+    return probs, var_size, mus, covs, inputs, targets, [tss, ids]
 
 
-def inference_with_prob_calculation__(model, path_data: str, folder: str):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def regularize_cov(cov, max_cond=6, min_var=1e-4):
+    eigvals, eigvecs = np.linalg.eigh(cov)  
 
-    probs = []
-    var_size = []
-    mus, covs = [], []
+    cond_number = eigvals.max() / eigvals.min()  
+    if cond_number > max_cond:
+        #print(f"Regularizing covariance matrix. Original cond: {cond_number}")
+        eigvals = np.maximum(eigvals, eigvals.max() / max_cond)  
+        cov = eigvecs @ np.diag(eigvals) @ eigvecs.T  
 
-    with torch.no_grad():
+    cov += min_var * np.eye(cov.shape[0])  
+
+    return cov
+
+
+def get_bounding_box_info(batch):
+    bboxs = []
+    for i in range(batch.shape[0]):
+        y_indices, x_indices = torch.where(batch[i][-1] == 1)  # bbox = 1
+
+        x_min, x_max = x_indices.min().item(), x_indices.max().item()
+        y_min, y_max = y_indices.min().item(), y_indices.max().item()
         
-        for i in range(4):
-            ds = dataset.getTorchDataSet(path_data, folder, i)
-            test = dataset.getTorchDataLoader(ds, train=False)
-            print(len(test))
+        bboxs.append([[x_min, y_min], [x_max, y_max]])
 
-            for i, (x, target) in tqdm(enumerate(test)):
-                # Falls x bereits Tensor ist, brauchen wir keine Umwandlung
-                x = x.to(device)
-
-                # Berechnungen in einem Schritt, nur einmal `detach().cpu().numpy()`
-                mu_batch, cov_batch = model(x)
-                mu_batch_cpu, cov_batch_cpu = mu_batch.detach().cpu().numpy(), cov_batch.detach().cpu().numpy()
-
-                # Anstatt für jedes Element die Schleife, könnte ein NumPy Vectorized Approach helfen
-                mus.append(mu_batch_cpu)
-                covs.append(cov_batch_cpu)
-
-                # Für alle Elemente auf einmal berechnen, ohne Looping
-                for mu, cov, pos in zip(mu_batch_cpu, cov_batch_cpu, target):
-                    cov = cov + 1e-4 * np.eye(2)  # ensure pos. sem. definit
-                    p = multivariate_normal.cdf(pos, mean=mu, cov=cov)
-                    prob = min(p, 1 - p)
-
-                    probs.append(prob)
-                    variance = np.sum([np.diag(v).sum() for v in cov])
-                    var_size.append(variance)
-
-        return probs, var_size, mus, covs
-    
-
-def inference_with_prob_calculation_(model, path_data: str, folder: str):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    probs = []
-    var_size = []
-    mus, covs = [], []
-
-    with torch.no_grad():
-        for i in range(4):
-            ds = dataset.getTorchDataSet(path_data, folder, i)
-            test = dataset.getTorchDataLoader(ds, train=False)
-            print(len(test))
-
-            for j, (x_batch, target_batch) in tqdm(enumerate(test)):
-                if j > 100:
-                    break
-                x_batch = x_batch.to(device)
-
-                mu_batch, cov_batch = model(x_batch)
-                
-                mu_batch_cpu = mu_batch.detach().cpu().numpy()
-                cov_batch_cpu = cov_batch.detach().cpu().numpy()
-
-                mus.append(mu_batch_cpu)
-                covs.append(cov_batch_cpu)
-
-                cov_batch_cpu += np.eye(2) * 1e-4
-
-                p_batch = np.array([
-                    multivariate_normal.cdf(pos, mean=mu, cov=cov)
-                    for pos, mu, cov in zip(target_batch, mu_batch_cpu, cov_batch_cpu)
-                ])
-                probs.extend(np.minimum(p_batch, 1 - p_batch))
-
-                var_batch = np.trace(cov_batch_cpu, axis1=-2, axis2=-1)
-                var_size.extend(var_batch)
-
-
-    return probs, var_size, mus, covs
+    return bboxs
