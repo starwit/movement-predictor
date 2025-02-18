@@ -8,7 +8,7 @@ class TrackedObjectPosition:
         self.class_id = None
         self.center = None
         self.bbox = None
-        #self.frame_idx = None
+        self.movement_angle = None
 
     def set_class_id(self, class_id):
         self.class_id = class_id
@@ -24,9 +24,9 @@ class TrackedObjectPosition:
     
     def set_center(self, center):
         self.center = center
-
-    #def set_frame_idx(self, frame_idx):
-     #   self.frame_idx = frame_idx
+    
+    def set_movement_angle(self, angle):
+        self.movement_angle = angle
 
     def get_class_id(self):
         return self.class_id
@@ -40,11 +40,11 @@ class TrackedObjectPosition:
     def get_uuid(self):
         return self.uuid
     
-    #def get_frame_idx(self):
-    #    return self.frame_idx
-    
     def get_center(self):
         return self.center
+    
+    def get_movement_angle(self):
+        return self.movement_angle
 
     
     def to_json(self):

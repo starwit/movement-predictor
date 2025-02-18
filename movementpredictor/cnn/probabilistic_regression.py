@@ -37,7 +37,7 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
   print("train size: ", len(train))
   print("val size: ", len(val))
 
-  for epoch in range(2):
+  for epoch in range(100):
 
     for count, (input, target, _, _) in tqdm(enumerate(train)):
       
@@ -74,7 +74,7 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
           print("no improvement")
           no_improvement += 1
 
-        if no_improvement > 7: 
+        if no_improvement > 10: 
           break
         
         model = model.train()
@@ -82,7 +82,7 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
         train_losses = []
         val_losses = []
 
-    if no_improvement > 7:
+    if no_improvement > 10:
       break
 
   model.load_state_dict(best_model_wts)
@@ -91,13 +91,100 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
   return model, history
 
 
+class advancedCNN(nn.Module):
+    def __init__(self):
+        super(advancedCNN, self).__init__()
+
+        # Convolutional layers with dilation instead of stride
+        self.conv1 = nn.Conv2d(4, 32, kernel_size=3, padding=1, dilation=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=2, dilation=2)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=4, dilation=4)
+
+        # Residual blocks for better gradient flow
+        self.res_block1 = nn.Sequential(
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 128),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 128)
+        )
+
+        self.res_block2 = nn.Sequential(
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 128),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 128)
+        )
+
+        # Downsampling with pooling
+        self.pool1 = nn.AdaptiveAvgPool2d((30, 30))
+        self.pool2 = nn.AdaptiveAvgPool2d((15, 15))
+
+        # Fully connected layers
+        self.fc1 = nn.Linear(128 * 15 * 15, 512)
+        self.fc2 = nn.Linear(512, 100)
+
+        # Outputs
+        self.fc_mu = nn.Linear(100, 2)  # Mean
+        self.fc_cov = nn.Linear(100, 3)  # Covariance matrix parameters
+
+    def forward(self, x):
+        # Convolutional layers with ReLU activation
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+
+        # Residual block 1
+        res = x
+        x = self.res_block1(x)
+        x += res
+        x = F.relu(x)
+
+        # Apply first pooling layer
+        x = self.pool1(x)
+
+        # Residual block 2
+        res = x
+        x = self.res_block2(x)
+        x += res
+        x = F.relu(x)
+
+        # Downsample to a fixed size
+        x = self.pool2(x)
+
+        # Flatten for fully connected layers
+        x = x.view(x.size(0), -1)
+
+        # Fully connected layers
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+
+        # Mean output
+        mu = self.fc_mu(x)
+
+        # Covariance matrix parameters
+        cov_params = self.fc_cov(x)
+
+        # Construct covariance matrix (positive semi-definite)
+        L = torch.zeros(mu.size(0), 2, 2).to(x.device)
+        L[:, 0, 0] = F.softplus(cov_params[:, 0])
+        L[:, 1, 0] = cov_params[:, 1]
+        L[:, 0, 1] = cov_params[:, 1]
+        L[:, 1, 1] = F.softplus(cov_params[:, 2])
+
+        sigma = torch.bmm(L, L.transpose(1, 2))
+
+        return mu, sigma
+
+
 class CNN(nn.Module):
 
     def __init__(self):
         super(CNN, self).__init__()
         # Encoder part (for simplicity, let's use simple conv layers)
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1)   
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)  
+        self.conv1 = nn.Conv2d(4, 64, kernel_size=3, stride=2, padding=1)   
+        self.conv2 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)  
         self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)  
         self.poolavg = nn.AvgPool2d(2, 2)
         self.conv4 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
@@ -244,19 +331,23 @@ def nll_loss(y_true, mu, sigma):
     epsilon = 1e-4  
     sigma_stable = sigma + epsilon * torch.eye(sigma.size(-1)).to(sigma.device) 
     
-    #reg_term = torch.trace(sigma_stable.sum(dim=0))  
     eigenvalues = torch.linalg.eigvalsh(sigma_stable)  # Nur reelle Eigenwerte
     cond_number = torch.max(eigenvalues) / torch.min(eigenvalues + 1e-5)  # Vermeide Division durch Null
     
     #log_det = torch.logdet(sigma_stable)
     sign, log_det = torch.linalg.slogdet(sigma_stable)
     log_det = sign * log_det
+
+    y_position = y_true[:, 1]  # Extrahiere die y-Position (batch_size,)
+    weight = torch.exp(-y_position)  # Beispiel: Gewicht nimmt mit y-Position ab
+    weighted_log_det = weight * log_det
+
     sigma_inv = torch.inverse(sigma_stable)
-    
     mahalanobis = torch.bmm(torch.bmm(error.transpose(1, 2), sigma_inv), error)
     
     # NLL Loss: Mahalanobis-Distanz + log(det(sigma)) + Regularisierung
-    loss = mahalanobis.squeeze() + 0.01 * log_det  + 0.001 * cond_number #+ 0.1 * log_det + 0.05 * reg_term
+    #loss = mahalanobis.squeeze() + 0.01 * log_det  + 0.001 * cond_number 
+    loss = mahalanobis.squeeze() + 0.01 * weighted_log_det + 0.001 * cond_number 
 
     return loss.mean()
     

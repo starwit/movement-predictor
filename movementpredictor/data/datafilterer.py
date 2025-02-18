@@ -3,12 +3,17 @@ from math import atan, degrees
 from typing import Dict
 from movementpredictor.data.trackedobjectposition import TrackedObjectPosition
 from tqdm import tqdm
+import numpy as np
+from scipy.signal import savgol_filter
+from scipy.interpolate import interp1d
+from filterpy.kalman import KalmanFilter
 
 
 class DataFilterer:
     log = logging.getLogger(__name__)
-    max_angle_change = 60
+    max_angle_change = 50
     max_millisec_between_3_detections = 2000
+    min_length = 5
 
     def apply_filtering(self, tracking_list: list[TrackedObjectPosition]) -> Dict[str, list[TrackedObjectPosition]]:
         self.log.debug("Start filtering tracks")
@@ -31,9 +36,134 @@ class DataFilterer:
                     continue
             new_mapping[key] = tracks_of_object
 
+        last_mapping = {}
+        for key, tracks_of_object in tqdm(new_mapping.items(), desc="filtering tracks"):
+            if len(tracks_of_object) < self.min_length:
+                continue
+
+            bboxes = [track.get_bbox() for track in tracks_of_object]
+            timestamps = [track.get_capture_ts() for track in tracks_of_object]
+
+            #seperate_indices = DataFilterer.separate_timestamps(timestamps)
+
+            smooth_bboxes, smooth_centers = DataFilterer.smooth_trajectory(bboxes, timestamps)
+
+            for track, bbox, center in zip(tracks_of_object, smooth_bboxes, smooth_centers):
+                track.set_bbox(bbox)
+                track.set_center(center)
+            
+            DataFilterer.calculate_movement_angle(tracks_of_object)
+            last_mapping[key] = tracks_of_object
+
+            for track in tracks_of_object:
+                if track.get_movement_angle() is None:
+                    print("ALARRRRRM!")
+            
+        return last_mapping
+    
+    @staticmethod
+    def smooth_trajectory(boxes, timestamps):
+        # smooth center, width, higth of bbox
+        boxes = np.array(boxes)
+        cx = (boxes[:, 0, 0] + boxes[:, 1, 0]) / 2
+        cy = (boxes[:, 0, 1] + boxes[:, 1, 1]) / 2
+        w = boxes[:, 1, 0] - boxes[:, 0, 0]
+        h = boxes[:, 1, 1] - boxes[:, 0, 1]
+
+        # Kalman-Filter für cx, cy, w, h
+        kf_cx = DataFilterer.create_kalman_filter()
+        kf_cy = DataFilterer.create_kalman_filter()
+        kf_w = DataFilterer.create_kalman_filter()
+        kf_h = DataFilterer.create_kalman_filter()
+
+        # Glättung der Bounding Boxes
+        cx_smooth = np.zeros_like(cx)
+        cy_smooth = np.zeros_like(cy)
+        w_smooth = np.zeros_like(w)
+        h_smooth = np.zeros_like(h)
+
+        for i in range(len(timestamps)):
+            dt = timestamps[i] - timestamps[i - 1] if i > 0 else 0
+
+            # Update Kalman-Filter für cx
+            kf_cx.F = np.array([[1, dt], [0, 1]])  # Zustandsübergangsmatrix
+            kf_cx.predict()
+            kf_cx.update(cx[i])
+            cx_smooth[i] = kf_cx.x[0]
+
+            # Update Kalman-Filter für cy
+            kf_cy.F = np.array([[1, dt], [0, 1]])  # Zustandsübergangsmatrix
+            kf_cy.predict()
+            kf_cy.update(cy[i])
+            cy_smooth[i] = kf_cy.x[0]
+
+            # Update Kalman-Filter für w
+            kf_w.F = np.array([[1, dt], [0, 1]])  # Zustandsübergangsmatrix
+            kf_w.predict()
+            kf_w.update(w[i])
+            w_smooth[i] = kf_w.x[0]
+
+            # Update Kalman-Filter für h
+            kf_h.F = np.array([[1, dt], [0, 1]])  # Zustandsübergangsmatrix
+            kf_h.predict()
+            kf_h.update(h[i])
+            h_smooth[i] = kf_h.x[0]
+
+        # Neue Bounding Boxes
+        x_min = cx_smooth - w_smooth / 2
+        x_max = cx_smooth + w_smooth / 2
+        y_min = cy_smooth - h_smooth / 2
+        y_max = cy_smooth + h_smooth / 2
+
+        new_bboxes = np.stack([np.stack([x_min, y_min], axis=1), np.stack([x_max, y_max], axis=1)], axis=1)
+        new_centers = np.stack([cx_smooth, cy_smooth], axis=1)
+        return new_bboxes, new_centers
+
+    
+    @staticmethod
+    def create_kalman_filter():
+        """
+        Klaman-filter for [position, velocity].
+        """
+        kf = KalmanFilter(dim_x=2, dim_z=1)
+        kf.x = np.array([0, 0])  # Initialzustand [position, velocity]
+        kf.P = np.eye(2) * 1000  # Anfängliche Unsicherheit
+        kf.R = 10  # Messunsicherheit
+        kf.Q = np.array([[1, 0], [0, 1]])  # Prozessrauschen
+        kf.H = np.array([[1, 0]])  # Messmatrix
+        return kf
+
+    
+    def apply_filtering_(self, tracking_list: list[TrackedObjectPosition]) -> Dict[str, list[TrackedObjectPosition]]:
+        self.log.debug("Start filtering tracks")
+        mapping = {}
+
+        for track in tracking_list:
+            key = track.uuid
+            if key not in mapping:
+                mapping[key] = []
+            mapping[key].append(track)
+        
+        new_mapping = {}
+        for key, tracks_of_object in mapping.items():
+            min_x = min(tracks_of_object, key=lambda obj: obj.get_center()[0]).get_center()[0]
+            max_x = max(tracks_of_object, key=lambda obj: obj.get_center()[0]).get_center()[0]
+            if max_x - min_x < 0.05:
+                min_y = min(tracks_of_object, key=lambda obj: obj.get_center()[1]).get_center()[1]
+                max_y = max(tracks_of_object, key=lambda obj: obj.get_center()[1]).get_center()[1]
+                if max_y - min_y < 0.05:
+                    continue
+            new_mapping[key] = tracks_of_object
+
         for key, tracks_of_object in tqdm(new_mapping.items(), desc="filtering tracks"):
             updated_tracks = []
+            skip = 0
+                
             for i in range(len(tracks_of_object) - 2):
+                if skip > 0:
+                    skip -= 1
+                    continue
+
                 prev_prev_track = tracks_of_object[i]
                 prev_track = tracks_of_object[i + 1]
                 track = tracks_of_object[i + 2]
@@ -48,9 +178,12 @@ class DataFilterer:
 
                 if track.capture_ts - prev_prev_track.capture_ts <= DataFilterer.max_millisec_between_3_detections:
                     angle_change = DataFilterer.get_angle_diff(track, prev_track, prev_prev_track)
+                    #speed_change = DataFilterer.get_speed_diff(track, prev_track, prev_prev_track)
+                    
                     if angle_change < DataFilterer.max_angle_change:
                         trajectory_angle = DataFilterer.get_angle(track, prev_prev_track)
                         if trajectory_angle == -1:
+                            skip = 2
                             continue
                         if prev_prev_track not in updated_tracks:
                             updated_tracks.append(prev_prev_track)
@@ -58,12 +191,48 @@ class DataFilterer:
                             updated_tracks.append(prev_track)
                         if track not in updated_tracks:
                             updated_tracks.append(track)
+                    else: 
+                        skip = 2
                 else: 
                     break
+
+            DataFilterer.calculate_movement_angle(updated_tracks)
             new_mapping[key] = updated_tracks  
 
-        return new_mapping
+            for track in updated_tracks:
+                if track.get_movement_angle() is None:
+                    print("ALARRRRRM!")
 
+        return new_mapping
+    
+
+    @staticmethod
+    def calculate_movement_angle(tracks_of_object):
+        for i in range(len(tracks_of_object) - 2):
+                prev_track = tracks_of_object[i]
+                track = tracks_of_object[i + 1]
+                next_track = tracks_of_object[i + 2]
+
+                success = False
+                j = i-1
+                while j > max(-1, i-10):
+                    if np.linalg.norm(np.array(next_track.get_center()) - np.array(prev_track.get_center())) < 0.015:
+                        prev_track = tracks_of_object[j]
+                    else:
+                        success = True
+                        break
+                    j -= 1
+                    
+                if not success and j > -1:
+                    angle = tracks_of_object[j].get_movement_angle()
+                else:
+                    angle = DataFilterer.get_angle(next_track, prev_track)
+                
+                track.set_movement_angle(angle)
+                if prev_track.get_movement_angle() is None:
+                    prev_track.set_movement_angle(angle)
+                if i == len(tracks_of_object) - 3:
+                    next_track.set_movement_angle(angle)
 
     @staticmethod
     def get_angle_diff(track, prev_track, prev_prev_track) -> float:

@@ -8,6 +8,15 @@ from movementpredictor.data import dataset
 from movementpredictor.cnn import inferencing
 import logging
 from collections import Counter, defaultdict
+import math
+import pybase64
+
+from movementpredictor.data.datamanagement import get_downsampled_tensor_img
+from movementpredictor.data.dataset import create_mask_tensor
+from movementpredictor.clustering.video_generation import store_video
+
+from visionapi.sae_pb2 import SaeMessage
+from visionlib import saedump
 
 log = logging.getLogger(__name__)
 
@@ -15,17 +24,30 @@ log = logging.getLogger(__name__)
 def plot_input_target_output(x, y, mu, sigma):
     frame_np = x[0].cpu().numpy()
     mask_others_np = x[1].cpu().numpy()
-    mask_interest_np = x[2].cpu().numpy()
+    mask_interest_np_sin = x[2].cpu().numpy()
+    mask_interest_np_cos = x[3].cpu().numpy()
     target = y.cpu().numpy()
 
-    make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np)
+    mask_interest_np = np.zeros(frame_np.shape)
+    mask_interest_np[(mask_interest_np_sin != 0) | (mask_interest_np_cos != 0)] = 1
+        
+    # calculate angle
+    sin = np.max(mask_interest_np_sin) if np.max(mask_interest_np_sin) > 0 else np.min(mask_interest_np_sin)
+    cos = np.max(mask_interest_np_cos) if np.max(mask_interest_np_cos) > 0 else np.min(mask_interest_np_cos)
+    angle_rad = math.atan2(sin, cos)
+    angle_deg = math.degrees(angle_rad)
+    if angle_deg < 0:
+        angle_deg += 360
+    angle_deg = round(angle_deg/2)
+
+    make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np, angle=angle_deg)
 
 
-def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None):
+def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None, angle=None):
     plt.figure(figsize=(22, 7))
 
     plt.subplot(1, 3, 1)
-    plt.title("input")
+    plt.title("input") if angle is None else plt.title("input, orientation angle: " + str(angle))
     plt.imshow(frame_np, cmap='gray', interpolation='nearest')
     if mask_others_np is not None:
         plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
@@ -81,7 +103,7 @@ def visualValidation(model, path_data) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     ds = dataset.getTorchDataSet(path_data, "clustering", 0)
-    test0 = dataset.getTorchDataLoader(ds, train=False)
+    test0 = dataset.getTorchDataLoader(ds, shuffle=False)
 
     with torch.no_grad():
         for count, (x, target, _, _) in enumerate(test0):
@@ -95,7 +117,7 @@ def visualValidation(model, path_data) -> None:
             plt.close()
 
 
-def output_distribution(probs, var_size, percentage_p=0.04, percentage_var=99.999):
+def output_distribution(probs, var_size, percentage_p=0.01, percentage_var=99.999):
     '''computes the thresholds for finding an anomaly based on the probability density and variance'''
 
     threshold_probs = np.percentile(probs, percentage_p)
@@ -128,7 +150,7 @@ def output_distribution(probs, var_size, percentage_p=0.04, percentage_var=99.99
 def plot_unlikely_samples(path_data, threshold_probs, threshold_vars, probs, var_size, mus, covs):
     count = 0
     ds = dataset.merge_datasets(path_data, "clustering")
-    test = dataset.getTorchDataLoader(ds, train=False)
+    test = dataset.getTorchDataLoader(ds, shuffle=False)
 
     batch_size = test.batch_size
     probs = [probs[i:i + batch_size] for i in range(0, len(probs), batch_size)]
@@ -150,7 +172,80 @@ def plot_unlikely_samples(path_data, threshold_probs, threshold_vars, probs, var
                 plt.savefig("plots/anomalies/anomaly_" + str(count) + ".png")
                 plt.close()
 
-   
+
+def find_intervals_containing_timestamp(timestamp, intervals):
+    return [interval for interval in intervals if interval[1] <= timestamp <= interval[2]]
+
+
+def anomalies_with_video(anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_covs, anomaly_probs, anomaly_ts, anomaly_id, path_sae_dump, dim_x, dim_y):
+    #TODO: iterate over anomaly_dict (a folder for each id), subloop iterating over all frames: 
+    # collect all frames fitting in the ts range + create plot if frame timestamp fits anomaly_ts
+    # after leaving the range: create video
+    anomaly_dict = defaultdict(list)
+    anomaly_ts_int = [int(ts) for ts in anomaly_ts]
+
+    for id, inp, tar, mu, cov, prob, ts in zip(anomaly_id, anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_covs, anomaly_probs, anomaly_ts_int):
+        anomaly_dict[id].append([ts, inp, tar, mu, cov, prob])
+    
+    video_dict = defaultdict(list)
+    for key in anomaly_dict.keys():
+        timestamps = [anomaly[0] for anomaly in anomaly_dict[key]]
+        min_ts = min(timestamps)
+        max_ts = max(timestamps)
+        start = min_ts - 3000
+        end = max_ts + 3000
+        video_dict[(key, start, end)] = [anomaly_dict[key]]
+    
+    with open(path_sae_dump, 'r') as input_file:
+        messages = saedump.message_splitter(input_file)
+
+        start_message = next(messages)
+        saedump.DumpMeta.model_validate_json(start_message)
+
+        for message in tqdm(messages, desc="collecting frames"):
+            event = saedump.Event.model_validate_json(message)
+            proto_bytes = pybase64.standard_b64decode(event.data_b64)
+
+            proto = SaeMessage()
+            proto.ParseFromString(proto_bytes)
+            frame_ts = proto.frame.timestamp_utc_ms
+
+            fitting_keys = find_intervals_containing_timestamp(frame_ts, video_dict.keys())
+
+            for key in fitting_keys:
+                frame_info = [proto.frame, None]
+                for detection in proto.detections:
+                    if str(key[0]) == str(detection.object_id):
+                        frame_info[1] = detection.bounding_box
+                        break
+                video_dict[key].append(frame_info)
+
+    dict_count = 0
+    for key in video_dict:
+        path = "plots/anomalies/" + str(dict_count) + "/"
+        os.makedirs(path, exist_ok=True)
+        dict_count += 1
+        img_count = 0
+
+        for ts, inp, tar, mu, cov, prob in video_dict[key][0]:
+            # create plots
+            frame_infos = [frame_info for frame_info in video_dict[key][1:] if frame_info[0].timestamp_utc_ms == ts]
+            if len(frame_infos) != 1: 
+                log.error("ALARRRRM!!! " + str(frame_info))
+            
+            frame_info = frame_infos[0]
+            frame_tensor = get_downsampled_tensor_img(frame_info[0], dim_x, dim_y)
+
+            mask_interest_np = create_mask_tensor(dim_x, dim_y, [inp], scale=False).numpy()
+            make_plot(frame_tensor.numpy(), mask_interest_np, tar.cpu().numpy(), mu, cov)
+            
+            plt.savefig(path + "a" + str(int(img_count)) + ".png")
+            img_count += 1
+            plt.close()
+        
+        store_video(video_dict[key][1:], path)
+
+
 def get_meaningful_unlikely_samples(probs, mus, covs, inputs, targets, prob_thr, ad_info):
     batch_size = len(mus[1])
     probs = [probs[i:i + batch_size] for i in range(0, len(probs), batch_size)]
