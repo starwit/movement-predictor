@@ -20,9 +20,9 @@ def main():
         trackedObjects = DataFilterer().apply_filtering(trackedObjects) 
 
         dataset.store_data(trackedObjects, config.path_store_data, i)
-        
+            
     train_ds = dataset.getTorchDataSet(config.path_store_data, "train_cnn", 0)
-    train_dl = dataset.getTorchDataLoader(train_ds)
+    train_dl = dataset.getTorchDataLoader(train_ds, shuffle=False)
 
     dataset.plotDataSamples(train_dl, 20)
 

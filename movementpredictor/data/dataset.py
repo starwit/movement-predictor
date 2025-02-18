@@ -8,6 +8,7 @@ import logging
 import os
 from collections import defaultdict
 import pickle
+import math
 
 
 log = logging.getLogger(__name__)
@@ -45,8 +46,6 @@ def getTorchDataSet(path_store, folder:str, num_dataset:int):
     return torch_dataset
 
 
-
-
 def merge_and_split_datasets(path_data, val_split_ratio=0.01):
     merged_dataset = merge_datasets(path_data, "train_cnn")
     
@@ -70,7 +69,7 @@ def merge_datasets(path_data, name="clustering"):
     return merged_dataset
 
 
-def getTorchDataLoader(dataset, val_split=False, train=True):
+def getTorchDataLoader(dataset, val_split=False, shuffle=True):
     batch_size = 8
 
     if val_split:
@@ -85,7 +84,7 @@ def getTorchDataLoader(dataset, val_split=False, train=True):
         return train_loader, val_loader
     
     else:
-        return DataLoader(dataset, batch_size=batch_size, shuffle=train, drop_last=True)
+        return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=True)
 
 
 def store_frame(frame: torch.Tensor, path_store):
@@ -104,7 +103,7 @@ def store_data(tracks: dict, path_store, num_batch):
 
 
 def make_input_target_pairs(tracks: dict) -> Dataset:
-    time_interval_in_millisec = 1500
+    time_interval_in_millisec = 1100
     prediction_step = 1000
     input_target_pairs = []
 
@@ -119,7 +118,7 @@ def make_input_target_pairs(tracks: dict) -> Dataset:
             for next_tr in trajectory[i:]:
                 ts.append(next_tr)
                 if next_tr.get_capture_ts() - timecur > time_interval_in_millisec:
-                    if len(ts) >= 2:
+                    if len(ts) >= 4 and next_tr.get_capture_ts() - ts[-2].get_capture_ts() < 500:
                         input_target_pairs.append([input_tr, get_position_after_time(ts, prediction_step)])
                     break
     
@@ -137,8 +136,9 @@ def make_input_target_pairs(tracks: dict) -> Dataset:
         target_tensor = np.array(tar, dtype=np.float32)
         frame_ts = np.str_(inp.get_capture_ts())
         obj_id = np.str_(inp.get_uuid())
+        angle = np.float32(inp.get_movement_angle())
 
-        input_target_pairs[i] = [bboxs_tensor, input_tensor, target_tensor, frame_ts, obj_id]
+        input_target_pairs[i] = [bboxs_tensor, input_tensor, target_tensor, frame_ts, obj_id, angle]
     
     return input_target_pairs
 
@@ -165,14 +165,26 @@ def plotDataSamples(dataloader: DataLoader, amount: int):
 
         frame_np = sample[0].cpu().numpy()
         mask_others_np = sample[1].cpu().numpy()
-        mask_interest_np = sample[2].cpu().numpy()
+        mask_interest_np_sin = sample[2].cpu().numpy()
+        mask_interest_np_cos = sample[3].cpu().numpy()
+        mask_interest_np = np.zeros(frame_np.shape)
+        mask_interest_np[(mask_interest_np_sin != 0) | (mask_interest_np_cos != 0)] = 1
+        
+        # calculate angle
+        sin = np.max(mask_interest_np_sin) if np.max(mask_interest_np_sin) > 0 else np.min(mask_interest_np_sin)
+        cos = np.max(mask_interest_np_cos) if np.max(mask_interest_np_cos) > 0 else np.min(mask_interest_np_cos)
+        angle_rad = math.atan2(sin, cos)
+        angle_deg = math.degrees(angle_rad)
+        if angle_deg < 0:
+            angle_deg += 360
+        angle_deg = round(angle_deg/2)
 
         target = target.cpu().numpy()
 
         plt.figure(figsize=(12, 6))
 
         plt.subplot(1, 2, 1)
-        plt.title("input")
+        plt.title("input, orientation angle : " + str(angle_deg))
         plt.imshow(frame_np, cmap='gray', interpolation='nearest')
         plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
         plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
@@ -192,6 +204,41 @@ def plotDataSamples(dataloader: DataLoader, amount: int):
         plt.close()
 
 
+def create_mask_angle_tensors(dim_x, dim_y, bboxs, angle, scale=True):
+    tensor = torch.zeros((2, dim_x, dim_y))
+    
+    for bbox in bboxs:
+        [x_min, y_min], [x_max, y_max] = bbox
+
+        if scale:
+            x_min_idx = int(x_min * dim_x)
+            x_max_idx = int(x_max * dim_x)
+            y_min_idx = int(y_min * dim_y)
+            y_max_idx = int(y_max * dim_y)
+        else:
+            x_min_idx, x_max_idx, y_min_idx, y_max_idx = x_min, x_max, y_min, y_max
+
+        #if x_max_idx-x_min_idx < 1:
+         #   x_max_idx = x_min_idx + 1
+          #  x_min_idx = x_min_idx - 1
+        #elif x_max_idx-x_min_idx < 2:
+         #   x_max_idx = x_min_idx + 1
+        
+        #if y_max_idx-y_min_idx < 1:
+         #   y_max_idx = y_min_idx + 1
+          #  y_min_idx = y_min_idx - 1
+        #elif y_max_idx-y_min_idx < 2:
+         #   y_max_idx = y_min_idx + 1
+
+        angle_without_direction = angle % 180
+        angle_rad = math.radians(angle_without_direction*2)
+
+        tensor[0, x_min_idx:x_max_idx, y_min_idx:y_max_idx] = math.sin(angle_rad)
+        tensor[1, x_min_idx:x_max_idx, y_min_idx:y_max_idx] = math.cos(angle_rad)
+
+    return tensor.permute(0, 2, 1)
+
+
 def create_mask_tensor(dim_x, dim_y, bboxs, scale=True):
     tensor = torch.zeros((dim_x, dim_y))
     
@@ -205,11 +252,6 @@ def create_mask_tensor(dim_x, dim_y, bboxs, scale=True):
             y_max_idx = int(y_max * dim_y)
         else:
             x_min_idx, x_max_idx, y_min_idx, y_max_idx = x_min, x_max, y_min, y_max
-
-        if x_max_idx-x_min_idx < 1:
-            x_max_idx = x_min_idx + 1
-        if y_max_idx-y_min_idx < 1:
-            y_max_idx = y_min_idx + 1
 
         tensor[x_min_idx:x_max_idx, y_min_idx:y_max_idx] = 1
 
@@ -232,6 +274,7 @@ class CNNData(Dataset):
         self.targets = [item[2] for item in inp_tar_list]
         self.frame_timestamps = [item[3] for item in inp_tar_list]
         self.ids = [item[4] for item in inp_tar_list]
+        self.angles = [item[5] for item in inp_tar_list]
 
     def __len__(self):
         return len(self.objects_of_interest)
@@ -247,8 +290,8 @@ class CNNData(Dataset):
         #frame_tensor = self.frames[inp_track.get_capture_ts()].unsqueeze(0)
         shape = (self.frame.shape[-1], self.frame.shape[-2])
         mask_tensor_others = create_mask_tensor(shape[0], shape[1], other_bboxs).unsqueeze(0)
-        mask_tensor_interest = create_mask_tensor(shape[0], shape[1], [inp_track]).unsqueeze(0)
-        sample = torch.cat((self.frame.unsqueeze(0), mask_tensor_others, mask_tensor_interest), dim=0).to(torch.float32)
+        mask_tensors_interest = create_mask_angle_tensors(shape[0], shape[1], [inp_track], angle=self.angles[idx])
+        sample = torch.cat((self.frame.unsqueeze(0), mask_tensor_others, mask_tensors_interest), dim=0).to(torch.float32)
         
         #target = create_target_tensor(shape[0], shape[1], tar_pos)
         target = torch.tensor(tar_pos).to(torch.float32)

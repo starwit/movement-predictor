@@ -18,7 +18,7 @@ def inference_with_stats(model, path_data: str, folder:str):
 
     with torch.no_grad():
         ds = dataset.merge_datasets(path_data, folder)
-        test = dataset.getTorchDataLoader(ds, train=False)
+        test = dataset.getTorchDataLoader(ds, shuffle=False)
         print(len(test))
 
         for i, (x, target, ts, id) in tqdm(enumerate(test)):
@@ -66,7 +66,7 @@ def regularize_cov(cov, max_cond=6, min_var=1e-4):
 def get_bounding_box_info(batch):
     bboxs = []
     for i in range(batch.shape[0]):
-        y_indices, x_indices = torch.where(batch[i][-1] == 1)  # bbox = 1
+        y_indices, x_indices = torch.where((batch[i][-1] != 0) | (batch[i][-2] != 0))  # bbox = 1
 
         x_min, x_max = x_indices.min().item(), x_indices.max().item()
         y_min, y_max = y_indices.min().item(), y_indices.max().item()
