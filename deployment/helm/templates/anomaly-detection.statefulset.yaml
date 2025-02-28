@@ -15,6 +15,7 @@ spec:
     metadata:
       annotations:
         starwit.de/stage: sae-anomaly-detection
+        starwit.de/config-checksum: {{ include (print $.Template.BasePath "/anomaly-detection.configmap.yaml") $ | sha256sum }}
       labels:
         {{- include "selectorLabels" $ | nindent 8 }}
         app.kubernetes.io/component: {{ include "fullname" $ }}
