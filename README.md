@@ -1,6 +1,6 @@
 # SAE Anomaly Detection
 
-This repository takes the results of the Starwit Awareness Engine, calls Anomaly Detection libs to get anomalies and send the results as AnomalyMessage to Valkey.
+This repository takes the results of the Starwit Awareness Engine from valkey, calls Anomaly Detection libs to get anomalies and send the results as AnomalyMessage to Valkey.
 
 ## Run for Development
 
