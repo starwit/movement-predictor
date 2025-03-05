@@ -42,8 +42,13 @@ class AnomalyDetection:
         filtered_data = self._detector.filter_tracks(data)
         anomaly_message = self._detector.examine_tracks_for_anomalies(filtered_data, frames)
 
-        if len(anomaly_message.trajectories) != 0:
-            return self._create_output(anomaly_message)
+        if len(anomaly_message.trajectories) == 0:
+            return None
+        
+        # Forward camera geo location (unset value does not need special treatment)
+        anomaly_message.camera_location.CopyFrom(sae_msg.frame.camera_location)
+
+        return self._create_output(anomaly_message)
     
     @PROTO_DESERIALIZATION_DURATION.time()
     def _unpack_proto(self, sae_message_bytes):
