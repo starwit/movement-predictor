@@ -643,7 +643,6 @@ description = "CUDA Runtime native Libraries"
 optional = false
 python-versions = ">=3"
 files = [
-    {file = "nvidia_cuda_runtime_cu12-12.4.127-py3-none-manylinux2014_aarch64.whl", hash = "sha256:961fe0e2e716a2a1d967aab7caee97512f71767f852f67432d572e36cb3a11f3"},
     {file = "nvidia_cuda_runtime_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:64403288fa2136ee8e467cdc9c9427e0434110899d07c779f25b5c068934faa5"},
     {file = "nvidia_cuda_runtime_cu12-12.4.127-py3-none-win_amd64.whl", hash = "sha256:09c2e35f48359752dfa822c09918211844a3d93c100a715d79b59591130c5e1e"},
 ]
@@ -738,7 +737,6 @@ description = "Nvidia JIT LTO Library"
 optional = false
 python-versions = ">=3"
 files = [
-    {file = "nvidia_nvjitlink_cu12-12.4.127-py3-none-manylinux2014_aarch64.whl", hash = "sha256:4abe7fef64914ccfa909bc2ba39739670ecc9e820c83ccc7a6ed414122599b83"},
     {file = "nvidia_nvjitlink_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:06b3b9b25bf3f8af351d664978ca26a16d2c5127dbd53c0497e28d1fb9611d57"},
     {file = "nvidia_nvjitlink_cu12-12.4.127-py3-none-win_amd64.whl", hash = "sha256:fd9020c501d27d135f983c6d3e244b197a7ccad769e34df53a42e276b0e25fa1"},
 ]
@@ -1759,7 +1757,7 @@ files = [
 
 [[package]]
 name = "visionapi"
-version = "3.0.0"
+version = "3.1.0"
 description = ""
 optional = false
 python-versions = "^3.10"
@@ -1772,8 +1770,8 @@ protobuf = "^4.23.0"
 [package.source]
 type = "git"
 url = "https://github.com/starwit/vision-api.git"
-reference = "3.0.0"
-resolved_reference = "8d57d6bc3ce54b467f4a854d40a5235f8dfca94e"
+reference = "3.1.0"
+resolved_reference = "3fea102e63c8a4474e058fb47d9f60dbe128a08d"
 subdirectory = "python/visionapi"
 
 [[package]]
@@ -1804,4 +1802,4 @@ subdirectory = "python"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "fcc4d995e0c77ca8a7648c0c703805976aa407d1be8cbaf3af1719a44773e19f"
+content-hash = "fce7e56dde0d19912944dc18ee844ddf88a502ddebf275e13272b4770d0b722e"
