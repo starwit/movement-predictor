@@ -4,16 +4,15 @@ from typing import Dict
 from movementpredictor.data.trackedobjectposition import TrackedObjectPosition
 from tqdm import tqdm
 import numpy as np
-from scipy.signal import savgol_filter
-from scipy.interpolate import interp1d
 from filterpy.kalman import KalmanFilter
+from sklearn.linear_model import TheilSenRegressor
 
 
 class DataFilterer:
     log = logging.getLogger(__name__)
     max_angle_change = 50
     max_millisec_between_3_detections = 2000
-    min_length = 5
+    min_length = 7
 
     def apply_filtering(self, tracking_list: list[TrackedObjectPosition]) -> Dict[str, list[TrackedObjectPosition]]:
         self.log.debug("Start filtering tracks")
@@ -45,13 +44,53 @@ class DataFilterer:
             timestamps = [track.get_capture_ts() for track in tracks_of_object]
 
             #seperate_indices = DataFilterer.separate_timestamps(timestamps)
-
             smooth_bboxes, smooth_centers = DataFilterer.smooth_trajectory(bboxes, timestamps)
 
             for track, bbox, center in zip(tracks_of_object, smooth_bboxes, smooth_centers):
                 track.set_bbox(bbox)
                 track.set_center(center)
-            
+
+            '''
+            updated_tracks = []
+            skip = 0
+                
+            for i in range(len(tracks_of_object) - 2):
+                if skip > 0:
+                    skip -= 1
+                    continue
+
+                prev_prev_track = tracks_of_object[i]
+                prev_track = tracks_of_object[i + 1]
+                track = tracks_of_object[i + 2]
+
+                # remove tracks at the border
+                #skip = False
+                #for t in [prev_prev_track, prev_track, track]:
+                #    if t.center[0] < 0.05 or t.center[0] > 0.95 or t.center[1] < 0.05 or t.center[1] > 0.95:
+                #        skip = True
+                #if skip:
+                #    continue
+
+                if track.capture_ts - prev_prev_track.capture_ts <= DataFilterer.max_millisec_between_3_detections:
+                    angle_change = DataFilterer.get_angle_diff(track, prev_track, prev_prev_track)
+                    #speed_change = DataFilterer.get_speed_diff(track, prev_track, prev_prev_track)
+                    
+                    if angle_change < DataFilterer.max_angle_change:
+                        trajectory_angle = DataFilterer.get_angle(track, prev_prev_track)
+                        if trajectory_angle == -1:
+                            skip = 2
+                            continue
+                        if prev_prev_track not in updated_tracks:
+                            updated_tracks.append(prev_prev_track)
+                        if prev_track not in updated_tracks:
+                            updated_tracks.append(prev_track)
+                        if track not in updated_tracks:
+                            updated_tracks.append(track)
+                    else: 
+                        skip = 2
+                else: 
+                    break
+            '''
             DataFilterer.calculate_movement_angle(tracks_of_object)
             last_mapping[key] = tracks_of_object
 
@@ -125,11 +164,18 @@ class DataFilterer:
         """
         Klaman-filter for [position, velocity].
         """
+        #kf = KalmanFilter(dim_x=2, dim_z=1)
+        #kf.x = np.array([0, 0])  # Initialzustand [position, velocity]
+        #kf.P = np.eye(2) * 1000  # Anfängliche Unsicherheit
+        #kf.R = 10  # Messunsicherheit
+        #kf.Q = np.array([[1, 0], [0, 1]])  # Prozessrauschen
+        #kf.H = np.array([[1, 0]])  # Messmatrix
+
         kf = KalmanFilter(dim_x=2, dim_z=1)
         kf.x = np.array([0, 0])  # Initialzustand [position, velocity]
-        kf.P = np.eye(2) * 1000  # Anfängliche Unsicherheit
-        kf.R = 10  # Messunsicherheit
-        kf.Q = np.array([[1, 0], [0, 1]])  # Prozessrauschen
+        kf.P = np.eye(2) * 10000  # Anfangsunsicherheit
+        kf.R = 100  # Erhöhte Messunsicherheit -> stärkeres Glätten
+        kf.Q = np.array([[0.1, 0], [0, 0.1]])  # Geringeres Prozessrauschen
         kf.H = np.array([[1, 0]])  # Messmatrix
         return kf
 
@@ -207,7 +253,45 @@ class DataFilterer:
     
 
     @staticmethod
-    def calculate_movement_angle(tracks_of_object):
+    def calculate_movement_angle(tracks_of_object: list[TrackedObjectPosition]):
+
+        for i in range(len(tracks_of_object) - 6):
+            tracks = tracks_of_object[i:i+7]
+            x = np.array([track.get_center()[0] for track in tracks]).reshape(-1, 1)
+            y = np.array([track.get_center()[1] for track in tracks]).ravel()
+
+            if np.linalg.norm(np.array(tracks[-1].get_center()) - np.array(tracks[0].get_center())) < 0.015 and i > 0:
+                angle = tracks_of_object[i-1].get_movement_angle()
+
+            else:
+                model = TheilSenRegressor()
+                model.fit(x, y)
+                slope = model.coef_[0]
+                intercept = model.intercept_
+                x_min = np.min(x)
+                point1 = [x_min, slope * x_min + intercept]
+                point2 = [x_min + 0.5, slope * (x_min + 0.5) + intercept]
+
+                prev_track, next_track = TrackedObjectPosition(), TrackedObjectPosition()
+                prev_track.set_center(point1)
+                next_track.set_center(point2)
+                angle = DataFilterer.get_angle(next_track, prev_track)
+
+            tracks_of_object[i+3].set_movement_angle(angle)
+
+            if i == 0:
+                tracks_of_object[i].set_movement_angle(angle)
+                tracks_of_object[i+1].set_movement_angle(angle)
+                tracks_of_object[i+2].set_movement_angle(angle)
+                
+            if i == len(tracks_of_object) - 7:
+                tracks_of_object[i+4].set_movement_angle(angle)
+                tracks_of_object[i+5].set_movement_angle(angle)
+                tracks_of_object[i+6].set_movement_angle(angle)
+    
+
+    @staticmethod
+    def calculate_movement_angle_(tracks_of_object):
         for i in range(len(tracks_of_object) - 2):
                 prev_track = tracks_of_object[i]
                 track = tracks_of_object[i + 1]
