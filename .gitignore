@@ -155,4 +155,4 @@ cython_debug/
 # repo specific
 *.saedump       
 datasets/
-weights/
+inferencebundle/
