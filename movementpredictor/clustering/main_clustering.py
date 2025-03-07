@@ -26,7 +26,7 @@ def main():
     anomaly_detector.visualValidation(model, config.path_store_data)
     #return
     probs, var_size, mus, covs, inps, tars, ad_info = inference_with_stats(model, config.path_store_data, "clustering")
-    p_thr, v_thr = anomaly_detector.output_distribution(probs, var_size)#, 0.04)
+    p_thr, v_thr = anomaly_detector.output_distribution(probs, var_size, config.percentage_anomaly)#, 0.04)
     anomaly_detector.plot_unlikely_samples(config.path_store_data, p_thr, v_thr, probs, var_size, mus, covs) 
 
     anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_covs, anomaly_probs, anomaly_ts, anomaly_id = anomaly_detector.get_meaningful_unlikely_samples(probs, mus, covs, inps, tars, p_thr, ad_info)
