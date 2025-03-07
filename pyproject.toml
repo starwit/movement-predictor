@@ -1,7 +1,7 @@
 [tool.poetry]
 package-mode = false
 name = "anomalydetection"
-version = "0.2.12"
+version = "0.3.0"
 description = ""
 authors = ["flonix8 <flstanek@googlemail.com>"]
 license = "AGPLv3"
