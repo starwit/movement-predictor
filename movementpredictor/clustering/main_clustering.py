@@ -16,7 +16,7 @@ config = ModelConfig()
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    weights = torch.load(config.path_model, map_location=device) 
+    weights = torch.load(config.path_model + "/model_weights.pth", map_location=device) 
 
     model = probabilistic_regression.CNN()
     model.load_state_dict(weights, strict=True)
@@ -27,6 +27,7 @@ def main():
     #return
     probs, var_size, mus, covs, inps, tars, ad_info = inference_with_stats(model, config.path_store_data, "clustering")
     p_thr, v_thr = anomaly_detector.output_distribution(probs, var_size, config.percentage_anomaly)#, 0.04)
+    anomaly_detector.store_parameter(config.path_model, p_thr, config.percentage_anomaly)
     anomaly_detector.plot_unlikely_samples(config.path_store_data, p_thr, v_thr, probs, var_size, mus, covs) 
 
     anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_covs, anomaly_probs, anomaly_ts, anomaly_id = anomaly_detector.get_meaningful_unlikely_samples(probs, mus, covs, inps, tars, p_thr, ad_info)
