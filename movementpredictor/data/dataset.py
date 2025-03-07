@@ -87,8 +87,9 @@ def getTorchDataLoader(dataset, val_split=False, shuffle=True):
         return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=True)
 
 
-def store_frame(frame: torch.Tensor, path_store):
-    torch.save(frame, path_store + "/frame.pth")
+def store_frame(frame: torch.Tensor, path_store1, path_store2):
+    torch.save(frame, path_store1 + "/frame.pth")
+    torch.save(frame, path_store2 + "/frame.pth")
 
 
 def store_data(tracks: dict, path_store, num_batch):

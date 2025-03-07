@@ -9,7 +9,7 @@ class ModelConfig:
     def __init__(self):
         load_dotenv()
 
-        self.path_model = os.getenv("PATH_MODEL")
+        self.path_model = os.getenv("PATH_INFERENCE_BUNDLE")
         self.path_sae_data = os.getenv("PATH_SAE_DATA")
         self.path_store_data = os.getenv("PATH_STORE_DATA")
         self.dim_x = int(os.getenv("DIM_X"))

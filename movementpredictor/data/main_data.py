@@ -13,7 +13,7 @@ config = ModelConfig()
 def main():
 
     background_frame = get_background_frame(config.path_sae_data, config.dim_x, config.dim_y)
-    dataset.store_frame(background_frame, config.path_store_data)
+    dataset.store_frame(background_frame, config.path_store_data, config.path_model)
 
     for i in range(12):
         trackedObjects = getTrackedBaseData(config.path_sae_data, i)           # 1'220'175 it in total

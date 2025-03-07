@@ -1,3 +1,4 @@
+import json
 import torch
 import matplotlib.pyplot as plt
 import os
@@ -145,6 +146,17 @@ def output_distribution(probs, var_size, percentage_p=0.01, percentage_var=99.99
     plt.clf()
 
     return threshold_probs, threshold_vars
+
+
+def store_parameter(path_model, p_thr, percentage_anomaly):
+    with open(path_model + "/parameters.json", "r") as json_file:
+        paras = json.load(json_file)
+    
+    paras["percentage_anomaly"] = percentage_anomaly
+    paras["anomaly_threshold"] = p_thr
+
+    with open(path_model + "/parameters.json", "w") as json_file:
+        json.dump(paras, json_file, indent=4)
 
 
 def plot_unlikely_samples(path_data, threshold_probs, threshold_vars, probs, var_size, mus, covs):
