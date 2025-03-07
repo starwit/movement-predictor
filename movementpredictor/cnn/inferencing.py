@@ -7,7 +7,6 @@ from movementpredictor.data import dataset
 
 
 def inference_with_stats(model, path_data: str, folder:str):
-    # TODO: possiblity to also store targets and input masks
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     probs = []

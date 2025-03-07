@@ -14,6 +14,7 @@ class ModelConfig:
         self.path_store_data = os.getenv("PATH_STORE_DATA")
         self.dim_x = int(os.getenv("DIM_X"))
         self.dim_y = int(os.getenv("DIM_Y"))
+        self.percentage_anomaly = int(os.getenv("PERCENTAGE_OF_ANOMALIES"))
 
     @classmethod
     def get_instance(cls):
