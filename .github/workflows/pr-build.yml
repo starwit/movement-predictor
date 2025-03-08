@@ -21,7 +21,7 @@ jobs:
 
     - name: build docker
       env:
-        GIT_CREDENTIALS: https://starwit:${{ secrets.VISION_PIPELINE_READ_TOKEN }}@github.com
+        GIT_CREDENTIALS: https://oauth2:${{ secrets.VISION_PIPELINE_READ_TOKEN }}@github.com/starwit/
       run: |
         docker build --secret id=GIT_CREDENTIALS -t docker.internal.starwit-infra.de/sae-anomaly-detection:tmp .
 
