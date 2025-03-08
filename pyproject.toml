@@ -9,19 +9,19 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-pydantic = "^2.0.0"
-torch = "^2.3.1"
+pydantic = "^2.10.6"
+torch = "^2.6.0"
 numpy = "^1.26.4"
 visionapi = { git = "https://github.com/starwit/vision-api.git", subdirectory = "python/visionapi", tag = "3.1.0" }
 visionlib = { git = "https://github.com/starwit/vision-lib.git", subdirectory = "python", tag = "0.10.0" }
 aesanomalydetection = { git = "https://github.com/starwit/ae-trajectories.git", branch = "main" }
 redis = "^5.0.0"
-pydantic-settings = "^2.0.3"
-prometheus-client = "0.20.0"
-opencv-python = "^4.10.0.84"
+pydantic-settings = "^2.8.1"
+prometheus-client = "0.21.1"
+opencv-python = "^4.11.0.86"
 tqdm = "^4.66.4"
-matplotlib = "^3.9.0"
-scipy = "^1.14.0"
+matplotlib = "^3.10.1"
+scipy = "^1.15.2"
 tomlkit = "^0.13.2"
 
 [build-system]
