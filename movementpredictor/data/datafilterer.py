@@ -53,10 +53,6 @@ class DataFilterer:
 
             DataFilterer.calculate_movement_angle(tracks_of_object)
             last_mapping[key] = tracks_of_object
-
-            for track in tracks_of_object:
-                if track.get_movement_angle() is None:
-                    print("ALARRRRRM!")
             
         return last_mapping
     

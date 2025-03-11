@@ -23,6 +23,10 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
                 # for getting a measure of the likeliness of the target given the predicted normal distribution, the cdf is used
                 #cov = cov + 1e-4 * np.eye(2)     # ensure pos. sem. definit
                 cov = regularize_cov(cov)
+                print(pos)
+                print(mu)
+                print(cov)
+                print(get_bounding_box_info(inp))
                 p = multivariate_normal.cdf(pos, mean=mu, cov=cov)
                 prob = min(p, 1-p)
 
