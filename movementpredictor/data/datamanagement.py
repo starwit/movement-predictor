@@ -82,14 +82,16 @@ def getTrackedBaseData(path, num_batch) -> list[TrackedObjectPosition]:
                     for detection in detections:
 
                         bbox = detection.bounding_box
-                        # only cars for now and bbox not too small
-                        if detection.class_id == 2 and bbox.max_x - bbox.min_x > 0.02 and bbox.max_y - bbox.min_y > 0.02: 
+                        classes_of_interest = [2, 5, 7]
+
+                        # only cars, trucks and busses for now and bbox not too small
+                        if detection.class_id in classes_of_interest and bbox.max_x - bbox.min_x > 0.02 and bbox.max_y - bbox.min_y > 0.02: 
 
                             track = TrackedObjectPosition()
                             track.set_capture_ts(proto.frame.timestamp_utc_ms)
                             track.set_uuid(detection.object_id)
                             track.set_class_id(detection.class_id)
-                            track.set_center([bbox.min_x + (bbox.max_x-bbox.min_x)/2, bbox.min_y + (bbox.max_y-bbox.min_y)/2])
+                            track.set_center((bbox.min_x + (bbox.max_x-bbox.min_x)/2, bbox.min_y + (bbox.max_y-bbox.min_y)/2))
                             track.set_bbox([[bbox.min_x, bbox.min_y], [bbox.max_x, bbox.max_y]])
                             extracted_tracks.append(track)
 

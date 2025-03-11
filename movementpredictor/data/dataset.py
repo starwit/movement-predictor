@@ -87,6 +87,14 @@ def getTorchDataLoader(dataset, val_split=False, shuffle=True):
         return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=True)
 
 
+def makeTorchDataLoader(tracks, path_frame):
+    raw_dataset = make_input_target_pairs(tracks)
+    frame = torch.load(path_frame)
+    torch_dataset = CNNData(frame, raw_dataset)
+    torch_dataloader = getTorchDataLoader(torch_dataset, shuffle=False)
+    return torch_dataloader
+
+
 def store_frame(frame: torch.Tensor, path_store1, path_store2):
     torch.save(frame, path_store1 + "/frame.pth")
     torch.save(frame, path_store2 + "/frame.pth")
@@ -162,47 +170,48 @@ def plotDataSamples(dataloader: DataLoader, amount: int):
     for count, (sample_batch, target_batch, _, _) in enumerate(dataloader):
         if count >= amount: break
 
-        sample, target = sample_batch[0], target_batch[0]
+        for i, (sample, target) in enumerate(zip(sample_batch, target_batch)):
+        #sample, target = sample_batch[0], target_batch[0]
 
-        frame_np = sample[0].cpu().numpy()
-        mask_others_np = sample[1].cpu().numpy()
-        mask_interest_np_sin = sample[2].cpu().numpy()
-        mask_interest_np_cos = sample[3].cpu().numpy()
-        mask_interest_np = np.zeros(frame_np.shape)
-        mask_interest_np[(mask_interest_np_sin != 0) | (mask_interest_np_cos != 0)] = 1
-        
-        # calculate angle
-        sin = np.max(mask_interest_np_sin) if np.max(mask_interest_np_sin) > 0 else np.min(mask_interest_np_sin)
-        cos = np.max(mask_interest_np_cos) if np.max(mask_interest_np_cos) > 0 else np.min(mask_interest_np_cos)
-        angle_rad = math.atan2(sin, cos)
-        angle_deg = math.degrees(angle_rad)
-        if angle_deg < 0:
-            angle_deg += 360
-        angle_deg = round(angle_deg/2)
+            frame_np = sample[0].cpu().numpy()
+            mask_others_np = sample[1].cpu().numpy()
+            mask_interest_np_sin = sample[2].cpu().numpy()
+            mask_interest_np_cos = sample[3].cpu().numpy()
+            mask_interest_np = np.zeros(frame_np.shape)
+            mask_interest_np[(mask_interest_np_sin != 0) | (mask_interest_np_cos != 0)] = 1
+            
+            # calculate angle
+            sin = np.max(mask_interest_np_sin) if np.max(mask_interest_np_sin) > 0 else np.min(mask_interest_np_sin)
+            cos = np.max(mask_interest_np_cos) if np.max(mask_interest_np_cos) > 0 else np.min(mask_interest_np_cos)
+            angle_rad = math.atan2(sin, cos)
+            angle_deg = math.degrees(angle_rad)
+            if angle_deg < 0:
+                angle_deg += 360
+            angle_deg = round(angle_deg/2)
 
-        target = target.cpu().numpy()
+            target = target.cpu().numpy()
 
-        plt.figure(figsize=(12, 6))
+            plt.figure(figsize=(12, 6))
 
-        plt.subplot(1, 2, 1)
-        plt.title("input, orientation angle : " + str(angle_deg))
-        plt.imshow(frame_np, cmap='gray', interpolation='nearest')
-        plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
-        plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
-        plt.axis('off')
+            plt.subplot(1, 2, 1)
+            plt.title("input, orientation angle : " + str(angle_deg))
+            plt.imshow(frame_np, cmap='gray', interpolation='nearest')
+            plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
+            plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
+            plt.axis('off')
 
-        plt.subplot(1, 2, 2)
-        plt.title("target")
-        frame_np = (frame_np * 255).astype(np.uint8)
-        frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_GRAY2RGB)
-        cv2.circle(frame_rgb, [round(target[0]*frame_np.shape[-1]), round(target[1]*frame_np.shape[-2])], radius=2, color=(255, 0, 0), thickness=-1)
-        plt.imshow(frame_rgb)
-        plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
-        plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
-        plt.axis('off')
+            plt.subplot(1, 2, 2)
+            plt.title("target")
+            frame_np = (frame_np * 255).astype(np.uint8)
+            frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_GRAY2RGB)
+            cv2.circle(frame_rgb, [round(target[0]*frame_np.shape[-1]), round(target[1]*frame_np.shape[-2])], radius=2, color=(255, 0, 0), thickness=-1)
+            plt.imshow(frame_rgb)
+            plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
+            plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
+            plt.axis('off')
 
-        plt.savefig("plots/exampleInput" + str(count) + ".png")
-        plt.close()
+            plt.savefig("plots/exampleInput" + str(count) + str(i) + ".png")
+            plt.close()
 
 
 def create_mask_angle_tensors(dim_x, dim_y, bboxs, angle, scale=True):
@@ -218,18 +227,6 @@ def create_mask_angle_tensors(dim_x, dim_y, bboxs, angle, scale=True):
             y_max_idx = int(y_max * dim_y)
         else:
             x_min_idx, x_max_idx, y_min_idx, y_max_idx = x_min, x_max, y_min, y_max
-
-        #if x_max_idx-x_min_idx < 1:
-         #   x_max_idx = x_min_idx + 1
-          #  x_min_idx = x_min_idx - 1
-        #elif x_max_idx-x_min_idx < 2:
-         #   x_max_idx = x_min_idx + 1
-        
-        #if y_max_idx-y_min_idx < 1:
-         #   y_max_idx = y_min_idx + 1
-          #  y_min_idx = y_min_idx - 1
-        #elif y_max_idx-y_min_idx < 2:
-         #   y_max_idx = y_min_idx + 1
 
         angle_without_direction = angle % 180
         angle_rad = math.radians(angle_without_direction*2)
@@ -298,3 +295,4 @@ class CNNData(Dataset):
         target = torch.tensor(tar_pos).to(torch.float32)
 
         return sample, target, frame_ts, obj_id
+    

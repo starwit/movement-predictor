@@ -12,11 +12,11 @@ config = ModelConfig()
 
 
 def main():
-
+    
     model, history = probabilistic_regression.trainAndStoreCNN(config.path_store_data, config.path_model)
     probabilistic_regression.store_parameters(history, config)
-    model.eval()
     probabilistic_regression.plot_loss_curve(history)
+    model.eval()
     
 if __name__ == "__main__":
     main()

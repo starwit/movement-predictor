@@ -12,7 +12,7 @@ import os
 from movementpredictor.data import dataset
 from movementpredictor.config import ModelConfig
 import json
-import datetime
+from datetime import datetime
 
 
 def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[float]]]: 
@@ -40,7 +40,7 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
   print("train size: ", len(train))
   print("val size: ", len(val))
 
-  for epoch in range(100):
+  for epoch in range(2):
 
     for count, (input, target, _, _) in tqdm(enumerate(train)):
       
@@ -105,7 +105,7 @@ def store_parameters(history, config: ModelConfig):
       "dim_y": config.dim_y
     }
    
-   with open(config.path_model + "/paramerters.json", "w") as json_file:
+   with open(config.path_model + "/parameters.json", "w") as json_file:
       json.dump(paras, json_file, indent=4)
 
 

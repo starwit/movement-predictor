@@ -6,6 +6,7 @@ from tqdm import tqdm
 import numpy as np
 from filterpy.kalman import KalmanFilter
 from sklearn.linear_model import TheilSenRegressor
+from scipy.signal import medfilt
 
 
 class DataFilterer:
@@ -44,53 +45,12 @@ class DataFilterer:
             timestamps = [track.get_capture_ts() for track in tracks_of_object]
 
             #seperate_indices = DataFilterer.separate_timestamps(timestamps)
-            smooth_bboxes, smooth_centers = DataFilterer.smooth_trajectory(bboxes, timestamps)
+            smooth_bboxes, smooth_centers = DataFilterer.smooth_trajectory_median(bboxes)#, timestamps)
 
             for track, bbox, center in zip(tracks_of_object, smooth_bboxes, smooth_centers):
                 track.set_bbox(bbox)
                 track.set_center(center)
 
-            '''
-            updated_tracks = []
-            skip = 0
-                
-            for i in range(len(tracks_of_object) - 2):
-                if skip > 0:
-                    skip -= 1
-                    continue
-
-                prev_prev_track = tracks_of_object[i]
-                prev_track = tracks_of_object[i + 1]
-                track = tracks_of_object[i + 2]
-
-                # remove tracks at the border
-                #skip = False
-                #for t in [prev_prev_track, prev_track, track]:
-                #    if t.center[0] < 0.05 or t.center[0] > 0.95 or t.center[1] < 0.05 or t.center[1] > 0.95:
-                #        skip = True
-                #if skip:
-                #    continue
-
-                if track.capture_ts - prev_prev_track.capture_ts <= DataFilterer.max_millisec_between_3_detections:
-                    angle_change = DataFilterer.get_angle_diff(track, prev_track, prev_prev_track)
-                    #speed_change = DataFilterer.get_speed_diff(track, prev_track, prev_prev_track)
-                    
-                    if angle_change < DataFilterer.max_angle_change:
-                        trajectory_angle = DataFilterer.get_angle(track, prev_prev_track)
-                        if trajectory_angle == -1:
-                            skip = 2
-                            continue
-                        if prev_prev_track not in updated_tracks:
-                            updated_tracks.append(prev_prev_track)
-                        if prev_track not in updated_tracks:
-                            updated_tracks.append(prev_track)
-                        if track not in updated_tracks:
-                            updated_tracks.append(track)
-                    else: 
-                        skip = 2
-                else: 
-                    break
-            '''
             DataFilterer.calculate_movement_angle(tracks_of_object)
             last_mapping[key] = tracks_of_object
 
@@ -100,6 +60,36 @@ class DataFilterer:
             
         return last_mapping
     
+
+    @staticmethod
+    def smooth_trajectory_median(bboxes, kernel_size=3):
+        bboxes = np.array(bboxes)
+    
+        # Eckpunkte extrahieren
+        x_min = bboxes[:, 0, 0]
+        y_min = bboxes[:, 0, 1]
+        x_max = bboxes[:, 1, 0]
+        y_max = bboxes[:, 1, 1]
+
+        # Median-Filter auf alle Koordinaten anwenden
+        x_min_smooth = medfilt(x_min, kernel_size)
+        y_min_smooth = medfilt(y_min, kernel_size)
+        x_max_smooth = medfilt(x_max, kernel_size)
+        y_max_smooth = medfilt(y_max, kernel_size)
+
+        # Neue Bounding Boxes zusammensetzen
+        smoothed_bboxes = np.stack([
+            np.stack([x_min_smooth, y_min_smooth], axis=1),
+            np.stack([x_max_smooth, y_max_smooth], axis=1)
+        ], axis=1)
+
+        cx_smooth = (x_min_smooth + x_max_smooth) / 2
+        cy_smooth = (y_min_smooth + y_max_smooth) / 2
+        smoothed_centers = np.stack([cx_smooth, cy_smooth], axis=1)
+
+        return smoothed_bboxes, smoothed_centers
+
+
     @staticmethod
     def smooth_trajectory(boxes, timestamps):
         # smooth center, width, higth of bbox
