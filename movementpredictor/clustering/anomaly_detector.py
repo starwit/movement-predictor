@@ -44,7 +44,7 @@ def plot_input_target_output(x, y, mu, sigma):
     make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np, angle=angle_deg)
 
 
-def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None, angle=None):
+def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None, angle=None, prob=None):
     plt.figure(figsize=(22, 7))
 
     plt.subplot(1, 3, 1)
@@ -67,7 +67,7 @@ def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None
     plt.axis('off')
 
     plt.subplot(1, 3, 3)
-    plt.title("prediction")
+    plt.title("prediction") if prob is None else plt.title("prediction, prob=" + str(prob))
     frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_GRAY2RGB)
     circle = [round(mu[0]*frame_np.shape[-1]), round(mu[1]*frame_np.shape[-2])]
     cv2.circle(frame_rgb, circle, radius=2, color=(255, 0, 0), thickness=-1)
@@ -100,27 +100,24 @@ def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None
     plt.axis('off')
 
 
-def visualValidation(model, path_data) -> None:
+def visualValidation(model, dataloader) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    ds = dataset.getTorchDataSet(path_data, "clustering", 0)
-    test0 = dataset.getTorchDataLoader(ds, shuffle=False)
-
     with torch.no_grad():
-        for count, (x, target, _, _) in enumerate(test0):
+        for count, (x, target, _, _) in enumerate(dataloader):
             if count >= 80: break
             model_data = torch.tensor(x).to(device)
             mu, sigma = model(model_data)
-            #print(sigma)
 
             plot_input_target_output(x[0], target[0], mu[0].detach().cpu().numpy(), sigma[0].detach().cpu().numpy())
             plt.savefig("plots/outputAE" + str(count) + ".png")
             plt.close()
 
 
-def output_distribution(probs, var_size, percentage_p=0.01, percentage_var=99.999):
+def output_distribution(samples_with_stats, percentage_p=0.01, percentage_var=99.999):
     '''computes the thresholds for finding an anomaly based on the probability density and variance'''
 
+    probs = [sample["prediction"]["probability_of_target"] for sample in samples_with_stats]
     threshold_probs = np.percentile(probs, percentage_p)
     print(threshold_probs)
 
@@ -133,6 +130,7 @@ def output_distribution(probs, var_size, percentage_p=0.01, percentage_var=99.99
     plt.show()
     plt.clf()
 
+    var_size = [np.diag(sample["prediction"]["variance"]).sum() for sample in samples_with_stats]
     threshold_vars = np.percentile(var_size, percentage_var)
     print(threshold_vars)
 
@@ -159,17 +157,24 @@ def store_parameter(path_model, p_thr, percentage_anomaly):
         json.dump(paras, json_file, indent=4)
 
 
-def plot_unlikely_samples(path_data, threshold_probs, threshold_vars, probs, var_size, mus, covs):
+def plot_unlikely_samples(test, threshold_probs, threshold_vars, samples_with_stats):
     count = 0
-    ds = dataset.merge_datasets(path_data, "clustering")
-    test = dataset.getTorchDataLoader(ds, shuffle=False)
-
     batch_size = test.batch_size
+
+    probs = [sample["prediction"]["probability_of_target"] for sample in samples_with_stats]
+    var_size = [np.diag(sample["prediction"]["variance"]).sum() for sample in samples_with_stats]
+    mus = [sample["prediction"]["mean"] for sample in samples_with_stats]
+    covs = [sample["prediction"]["variance"] for sample in samples_with_stats]
+
     probs = [probs[i:i + batch_size] for i in range(0, len(probs), batch_size)]
     var_size = [var_size[i:i + batch_size] for i in range(0, len(var_size), batch_size)]
+    mus = [mus[i:i + batch_size] for i in range(0, len(mus), batch_size)]
+    covs = [covs[i:i + batch_size] for i in range(0, len(covs), batch_size)]
 
     os.makedirs("plots/anomalies", exist_ok=True)
     for i, (x, target, _, _) in tqdm(enumerate(test)):
+        #if i == 10000:
+         #       break
         for mu, cov, inp, pos, p, var_s in zip(mus[i], covs[i], x, target, probs[i], var_size[i]):
             if p < threshold_probs:
                 count += 1
@@ -189,19 +194,16 @@ def find_intervals_containing_timestamp(timestamp, intervals):
     return [interval for interval in intervals if interval[1] <= timestamp <= interval[2]]
 
 
-def anomalies_with_video(anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_covs, anomaly_probs, anomaly_ts, anomaly_id, path_sae_dump, dim_x, dim_y):
-    #TODO: iterate over anomaly_dict (a folder for each id), subloop iterating over all frames: 
-    # collect all frames fitting in the ts range + create plot if frame timestamp fits anomaly_ts
-    # after leaving the range: create video
+def anomalies_with_video(anomalies, path_sae_dump, dim_x, dim_y):
     anomaly_dict = defaultdict(list)
-    anomaly_ts_int = [int(ts) for ts in anomaly_ts]
+    anomaly_ts_int = [int(anomaly["timestamp"]) for anomaly in anomalies]
 
-    for id, inp, tar, mu, cov, prob, ts in zip(anomaly_id, anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_covs, anomaly_probs, anomaly_ts_int):
-        anomaly_dict[id].append([ts, inp, tar, mu, cov, prob])
+    for anomaly, ts in zip(anomalies, anomaly_ts_int):
+        anomaly_dict[anomaly["obj_id"]].append([ts, anomaly])
     
     video_dict = defaultdict(list)
     for key in anomaly_dict.keys():
-        timestamps = [anomaly[0] for anomaly in anomaly_dict[key]]
+        timestamps = [value[0] for value in anomaly_dict[key]]
         min_ts = min(timestamps)
         max_ts = max(timestamps)
         start = min_ts - 3000
@@ -239,7 +241,7 @@ def anomalies_with_video(anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_c
         dict_count += 1
         img_count = 0
 
-        for ts, inp, tar, mu, cov, prob in video_dict[key][0]:
+        for ts, anomaly in video_dict[key][0]:
             # create plots
             frame_infos = [frame_info for frame_info in video_dict[key][1:] if frame_info[0].timestamp_utc_ms == ts]
             if len(frame_infos) != 1: 
@@ -248,8 +250,9 @@ def anomalies_with_video(anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_c
             frame_info = frame_infos[0]
             frame_tensor = get_downsampled_tensor_img(frame_info[0], dim_x, dim_y)
 
-            mask_interest_np = create_mask_tensor(dim_x, dim_y, [inp], scale=False).numpy()
-            make_plot(frame_tensor.numpy(), mask_interest_np, tar.cpu().numpy(), mu, cov)
+            mask_interest_np = create_mask_tensor(dim_x, dim_y, [anomaly["input"]], scale=False).numpy()
+            make_plot(frame_tensor.numpy(), mask_interest_np, anomaly["target"].cpu().numpy(), anomaly["prediction"]["mean"], 
+                      anomaly["prediction"]["variance"], prob=anomaly["prediction"]["probability_of_target"])
             
             plt.savefig(path + "a" + str(int(img_count)) + ".png")
             img_count += 1
@@ -258,41 +261,20 @@ def anomalies_with_video(anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_c
         store_video(video_dict[key][1:], path)
 
 
-def get_meaningful_unlikely_samples(probs, mus, covs, inputs, targets, prob_thr, ad_info):
-    batch_size = len(mus[1])
-    probs = [probs[i:i + batch_size] for i in range(0, len(probs), batch_size)]
-
+def get_meaningful_unlikely_samples(samples_with_stats, prob_thr):
     # 4 - bbox input; 2 - target position; 2 - output mean; 3 - cholesky of output cov 
-    anomaly_mus = []
-    anomaly_covs = []
-    anomaly_inputs = []
-    anomaly_targets = []
-    anomaly_ts = []
-    anomaly_id = []
-    anomaly_probs = []
+    anomaly_samples = []
 
-    for mu_batch, cov_batch, inp_batch, pos_batch, p_batch, ts_batch, id_batch in zip(mus, covs, inputs, targets, probs, ad_info[0], ad_info[1]):
-        for mu, cov, inp, pos, p, ts, id in zip(mu_batch, cov_batch, inp_batch, pos_batch, p_batch, ts_batch, id_batch):
-            if p < prob_thr:
-                anomaly_mus.append(mu)
-                anomaly_covs.append(cov)
-                anomaly_inputs.append(inp)
-                anomaly_targets.append(pos)
-                anomaly_ts.append(ts)
-                anomaly_id.append(id)
-                anomaly_probs.append(p)
+    for sample in samples_with_stats:
+        if sample["prediction"]["probability_of_target"] < prob_thr:
+            anomaly_samples.append(sample)
     
     # remove samples whose id only exists once
-    id_counts = Counter(anomaly_id)
+    anomaly_ids = [sample["obj_id"] for sample in anomaly_samples]
+    id_counts = Counter(anomaly_ids)
     ids_to_remove = {id for id, count in id_counts.items() if count == 1}
-    indices_to_remove = [index for index, id in enumerate(anomaly_id) if id in ids_to_remove]
+    indices_to_remove = [index for index, id in enumerate(anomaly_ids) if id in ids_to_remove]
 
-    anomaly_mus = [mu for index, mu in enumerate(anomaly_mus) if index not in indices_to_remove]
-    anomaly_covs = [cov for index, cov in enumerate(anomaly_covs) if index not in indices_to_remove]
-    anomaly_inputs = [inp for index, inp in enumerate(anomaly_inputs) if index not in indices_to_remove]
-    anomaly_targets = [pos for index, pos in enumerate(anomaly_targets) if index not in indices_to_remove]
-    anomaly_ts = [ts for index, ts in enumerate(anomaly_ts) if index not in indices_to_remove]
-    anomaly_id = [id for index, id in enumerate(anomaly_id) if index not in indices_to_remove]
-    anomaly_probs = [p for index, p in enumerate(anomaly_probs) if index not in indices_to_remove]
+    anomalies = [sample for index, sample in enumerate(anomaly_samples) if index not in indices_to_remove]
 
-    return anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_covs, anomaly_probs, anomaly_ts, anomaly_id
+    return anomalies

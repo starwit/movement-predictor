@@ -6,6 +6,7 @@ from movementpredictor.config import ModelConfig
 from movementpredictor.cnn.inferencing import inference_with_stats
 from movementpredictor.clustering import clusterer
 from movementpredictor.clustering import anomaly_detector
+from movementpredictor.data import dataset
 
 import logging
 import torch
@@ -23,15 +24,18 @@ def main():
     model.to(device)
     model.eval()
 
-    anomaly_detector.visualValidation(model, config.path_store_data)
-    #return
-    probs, var_size, mus, covs, inps, tars, ad_info = inference_with_stats(model, config.path_store_data, "clustering")
-    p_thr, v_thr = anomaly_detector.output_distribution(probs, var_size, config.percentage_anomaly)#, 0.04)
-    anomaly_detector.store_parameter(config.path_model, p_thr, config.percentage_anomaly)
-    anomaly_detector.plot_unlikely_samples(config.path_store_data, p_thr, v_thr, probs, var_size, mus, covs) 
+    ds = dataset.merge_datasets(config.path_store_data, "clustering")
+    test = dataset.getTorchDataLoader(ds, shuffle=False)
 
-    anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_covs, anomaly_probs, anomaly_ts, anomaly_id = anomaly_detector.get_meaningful_unlikely_samples(probs, mus, covs, inps, tars, p_thr, ad_info)
-    anomaly_detector.anomalies_with_video(anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_covs, anomaly_probs, anomaly_ts, anomaly_id, config.path_sae_data, config.dim_x, config.dim_y)
+    anomaly_detector.visualValidation(model, test)
+    #return
+    samples_with_stats = inference_with_stats(model, test)
+    p_thr, v_thr = anomaly_detector.output_distribution(samples_with_stats, config.percentage_anomaly)#, 0.04)
+    anomaly_detector.store_parameter(config.path_model, p_thr, config.percentage_anomaly)
+    anomaly_detector.plot_unlikely_samples(test, p_thr, v_thr, samples_with_stats) 
+
+    anomalies = anomaly_detector.get_meaningful_unlikely_samples(samples_with_stats, p_thr)
+    anomaly_detector.anomalies_with_video(anomalies, config.path_sae_data, config.dim_x, config.dim_y)
 
     return
     clustering_vectors, normalization_paras = clusterer.get_clustering_vectors(anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_probs)
