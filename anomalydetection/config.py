@@ -13,16 +13,16 @@ class RedisConfig(BaseModel):
     stream_prefix: str = 'undefined'
 
 class ModelConfig(BaseModel):
-    anomaly_loss_threshold: float = 0.01
     parameters_path: Path = Path("model/parameters.json")
-    weights_path: Path = Path("model/best_model_weights_8dim.pth")
+    weights_path: Path = Path("model/model_weights.pth")
+    background_path: Path = Path("model/frame.pth")
 
 class AnomalyDetectionConfig(BaseSettings):
     log_level: LogLevel = LogLevel.INFO
     redisIn: RedisConfig = RedisConfig()
     redisOut: RedisConfig = RedisConfig()
     prometheus_port: Annotated[int, Field(ge=1024, le=65536)] = 8000
-    model: ModelConfig
+    model: ModelConfig = ModelConfig()
     filtering: bool = True
 
     # `model_config` refers to the pydantic model and has nothing to do with `model` above

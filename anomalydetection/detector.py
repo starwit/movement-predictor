@@ -2,11 +2,19 @@ import logging
 import os
 import sys
 
+import ast
 import torch
 import torch.nn as nn
-from aesanomalydetection.datafilterer import DataFilterer
-from aesanomalydetection.recurrentae.ae import LSTM_AE
-from aesanomalydetection.recurrentae.dataset import makeTorchPredictionDataSet
+
+from movementpredictor.data.datafilterer import DataFilterer
+from movementpredictor.data.dataset import makeTorchDataLoader
+from movementpredictor.cnn.probabilistic_regression import CNN
+from movementpredictor.cnn.inferencing import inference_with_stats
+from movementpredictor.clustering.anomaly_detector import get_meaningful_unlikely_samples
+#from aesanomalydetection.datafilterer import DataFilterer
+#from aesanomalydetection.recurrentae.ae import LSTM_AE
+#from aesanomalydetection.recurrentae.dataset import makeTorchPredictionDataSet
+
 from visionapi.anomaly_pb2 import AnomalyMessage, Point, Trajectory
 
 from anomalydetection.config import AnomalyDetectionConfig
@@ -36,7 +44,7 @@ class Detector():
         self._config = CONFIG
         self._parameters = ModelInfoCollector(CONFIG).model_parameters
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self._model = LSTM_AE(self._parameters["dimension_latent_space"]).to(self._device)
+        self.model = CNN().to(self._device)
 
         try:
             weights = torch.load(self._config.model.weights_path, map_location=torch.device(self._device))
@@ -44,9 +52,9 @@ class Detector():
             log.error(f"Model weights not found at {self._config.model.weights_path}")
             exit(1)
         try:    
-            self._model.load_state_dict(weights)
+            self.model.load_state_dict(weights)
         except:
-            log.error(f"Model weights do not fit model architecture LSTM_AE")
+            log.error(f"Model weights do not fit model architecture")
             exit(1)
 
         log.info("starting anomaly detection with parameters:")
@@ -55,53 +63,40 @@ class Detector():
       
     def filter_tracks(self, tracks):
         if len(tracks) != 0:
-            tracks = [item for sublist in tracks for item in sublist]
             log.info(f"num tracks before filtering: {len(tracks)}")
             if self._config.filtering:
                 tracks = DataFilterer().apply_filtering(tracks)
                 log.info(f"num tracks after filtering: {len(tracks)}")
             else:
-                tracks = self._skip_filter_tracks(tracks)
+                tracks = DataFilterer().only_smoothing(tracks)
                 log.info(f"TESTING WITHOUT FILTERING")
         return tracks
     
     def examine_tracks_for_anomalies(self, tracks, frames) -> AnomalyMessage:
-        total_anomalies = []
         if len(tracks) != 0:
-            criterion = nn.L1Loss(reduction='sum').to(self._device)
+            with SuppressOutput():      # suppress tqdm progress bar
+                dataloader = makeTorchDataLoader(tracks, self._config.model.background_path)
+                outputs_with_stats = inference_with_stats(self.model, dataloader)
+                anomalies = get_meaningful_unlikely_samples(outputs_with_stats, self._parameters["anomaly_threshold"])
 
-            for id in tracks.keys():
-                anomalies=[] 
-                if len(tracks[id]) < 5:
-                    continue
-                with SuppressOutput():      # suppress tqdm progress bar
-                    trajectories_dataset = makeTorchPredictionDataSet({id: tracks[id]})
+                if len(anomalies) != 0:
+                    log.info("anomaly found")
 
-                with torch.no_grad():
-                    for trajectory, orig_input in trajectories_dataset:
-                        trajectory = trajectory.to(self._device).reshape(-1, trajectory.shape[-2], trajectory.shape[-1])
-                        orig_input = orig_input.squeeze(0)
-                        target = trajectory
-                        pred = self._model(target)
-                        loss = criterion(pred, target)
-                        if loss.item() > self._config.model.anomaly_loss_threshold:
-                            log.info("anomaly found")
-                            anomalies.append([trajectory, tracks[id][orig_input[0]: orig_input[1]]])
-
-                total_anomalies += anomalies
-
-        #TODO consider refactorying format of total_anomalies
-        return self._write_anomaly_message(total_anomalies, frames)
+        return self._write_anomaly_message(anomalies, frames, tracks)
     
-    def _write_anomaly_message(self, total_anomalies, frames) -> AnomalyMessage:
+    def _write_anomaly_message(self, anomalies, frames, tracks) -> AnomalyMessage:
         anomaly_msg = AnomalyMessage()
+        
+        if len(anomalies) > 0:
+            anomaly_trajectories = {}
+            anomaly_ids = [anomaly["obj_id"] for anomaly in anomalies]
 
-        if len(total_anomalies) > 0:
-            for anomaly in total_anomalies:
+            for id in anomaly_ids:
+                anomaly_trajectories[id] = tracks[ast.literal_eval(id)]
+
+            for id in anomaly_trajectories.keys():
                 trajectory = anomaly_msg.trajectories.add() 
-                #print(anomaly[1])
-                #trajectory.CopyFrom(self._map_anomaly(anomaly[1].view(-1, anomaly[1].size(-1))))
-                trajectory.CopyFrom(self._map_anomaly(anomaly[1]))
+                trajectory.CopyFrom(self._map_anomaly(anomalies, anomaly_trajectories[id]))
         
             if len(frames) > 0:
                 for frame in frames:
@@ -111,10 +106,14 @@ class Detector():
         
         return anomaly_msg
 
-    def _map_anomaly(self, anomaly) -> Trajectory:
+    def _map_anomaly(self, total_anomalies, anomaly_trajectory) -> Trajectory:
         trajectory = Trajectory()
+        trajectory.object_id = anomaly_trajectory[0].get_uuid()
+        trajectory.class_id = anomaly_trajectory[0].get_class_id()
 
-        for track in anomaly:
+        anomaly_trigger_ts = [a["timestamp"] for a in total_anomalies if a["obj_id"] == trajectory.object_id]
+
+        for track in anomaly_trajectory:
             #trajectory_point = TrajectoryPoint()
             trajectory_point = trajectory.trajectory_points.add()
 
@@ -123,35 +122,11 @@ class Detector():
             center_point.y = track.get_center()[1]
 
             trajectory_point.detection_center.CopyFrom(center_point)
-            trajectory_point.anomaly_trigger = True
-            trajectory_point.timestamp_utc_ms = int(track.capture_ts.timestamp() * 1000)
-        
-        #TODO: trajectory object_id, class_id
+            if track.get_capture_ts() in anomaly_trigger_ts:
+                trajectory_point.anomaly_trigger = True
+            else:
+                trajectory_point.anomaly_trigger = False
+            trajectory_point.timestamp_utc_ms = track.get_capture_ts()
 
-        '''
-        trajectory_point = TrajectoryPoint()
-        center_point = Point()
-        center_point.x = [track.get_center()[0] for track in anomaly]
-        center_point.y = [1 - track.get_center()[1] for track in anomaly]
-        anomaly_trigger = [True for _ in anomaly]
-        timestamp_utc_ms = [track.capture_ts for track in anomaly]
-
-        trajectory = Trajectory()
-        trajectory_point = trajectory.trajectory_points.add()
-        trajectory_point.detection_center.CopyFrom(center_point)
-        trajectory_point.anomaly_trigger.CopyFrom(anomaly_trigger)
-        trajectory_point.timestamp_utc_ms.CopyFrom(timestamp_utc_ms)
-        '''
         #print(trajectory)
         return trajectory
-
-    # TESTING WITHOUT FILTERING
-    def _skip_filter_tracks(self, tracks):
-        mapping = {}
-        for track in tracks:
-            key = track.uuid
-            if key not in mapping:
-                mapping[key] = []
-            mapping[key].append(track)
-        tracks = mapping
-        return tracks
