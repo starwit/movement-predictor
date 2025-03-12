@@ -121,6 +121,8 @@ def make_input_target_pairs(tracks: dict) -> Dataset:
             continue
 
         for i, input_tr in enumerate(trajectory):
+            if input_tr.get_class_id() != 2:
+                continue
             timecur = input_tr.get_capture_ts()
             ts = []
 

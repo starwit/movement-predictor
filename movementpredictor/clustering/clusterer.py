@@ -86,7 +86,6 @@ def apply_clustering(cluster_data):
 
 
 def plot_anomalies_per_cluster(clusters, anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_covs, anomaly_ts, path_sae_dump, dim_x, dim_y):
-    # TODO: ALARM ALARM cluster 0 und 1 werden nicht geplotted!!!!
     max_cluster = max(clusters)
     outlier_counter = 1
     img_counter = np.zeros((max_cluster+1))

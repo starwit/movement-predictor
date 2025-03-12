@@ -73,7 +73,7 @@ def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None
     cv2.circle(frame_rgb, circle, radius=2, color=(255, 0, 0), thickness=-1)
 
     sigma = inferencing.regularize_cov(sigma)
-    eigenvalues, eigenvectors = np.linalg.eigh(sigma*frame_np.shape[-1]*20)
+    eigenvalues, eigenvectors = np.linalg.eigh(sigma*frame_np.shape[-1]*3)  # add factor for better visualization
     order = eigenvalues.argsort()[::-1]
     eigenvalues = eigenvalues[order]
     eigenvectors = eigenvectors[:, order]
@@ -114,22 +114,25 @@ def visualValidation(model, dataloader) -> None:
             plt.close()
 
 
-def output_distribution(samples_with_stats, percentage_p=0.01, percentage_var=99.999):
+def calculate_and_visualize_threshold(samples_with_stats, percentage_p=99.99):
     '''computes the thresholds for finding an anomaly based on the probability density and variance'''
 
-    probs = [sample["prediction"]["probability_of_target"] for sample in samples_with_stats]
-    threshold_probs = np.percentile(probs, percentage_p)
-    print(threshold_probs)
+    dists = [sample["prediction"]["distance_of_target"] for sample in samples_with_stats]
+    threshold_dists = np.percentile(dists, percentage_p)
+    log.info("Distance-threshold: " + str(threshold_dists))
 
-    plt.hist(probs, bins=100, edgecolor='black')
-    plt.title('probability distribution')
-    plt.xlabel('prob')
+    plt.hist(dists, bins=100, edgecolor='black')
+    plt.title('distance distribution')
+    plt.xlabel('dist')
     plt.ylabel('amount')
-    plt.axvline(x=threshold_probs, color='black', linestyle='dashed', label='threshold')
+    plt.axvline(x=threshold_dists, color='black', linestyle='dashed', label='threshold')
     plt.savefig("plots/probs.png")
     plt.show()
     plt.clf()
 
+    return threshold_dists
+
+'''
     var_size = [np.diag(sample["prediction"]["variance"]).sum() for sample in samples_with_stats]
     threshold_vars = np.percentile(var_size, percentage_var)
     print(threshold_vars)
@@ -143,51 +146,52 @@ def output_distribution(samples_with_stats, percentage_p=0.01, percentage_var=99
     plt.show()
     plt.clf()
 
-    return threshold_probs, threshold_vars
+    return threshold_probs, threshold_vars''
+'''
 
 
-def store_parameter(path_model, p_thr, percentage_anomaly):
+def store_parameter(path_model, dist_thr, percentage_anomaly):
     with open(path_model + "/parameters.json", "r") as json_file:
         paras = json.load(json_file)
     
     paras["percentage_anomaly"] = percentage_anomaly
-    paras["anomaly_threshold"] = p_thr
+    paras["anomaly_threshold"] = dist_thr
 
     with open(path_model + "/parameters.json", "w") as json_file:
         json.dump(paras, json_file, indent=4)
 
 
-def plot_unlikely_samples(test, threshold_probs, threshold_vars, samples_with_stats):
+def plot_unlikely_samples(test, threshold_dist, samples_with_stats):
     count = 0
     batch_size = test.batch_size
 
-    probs = [sample["prediction"]["probability_of_target"] for sample in samples_with_stats]
-    var_size = [np.diag(sample["prediction"]["variance"]).sum() for sample in samples_with_stats]
+    dists = [sample["prediction"]["distance_of_target"] for sample in samples_with_stats]
+    #var_size = [np.diag(sample["prediction"]["variance"]).sum() for sample in samples_with_stats]
     mus = [sample["prediction"]["mean"] for sample in samples_with_stats]
     covs = [sample["prediction"]["variance"] for sample in samples_with_stats]
 
-    probs = [probs[i:i + batch_size] for i in range(0, len(probs), batch_size)]
+    dists = [dists[i:i + batch_size] for i in range(0, len(dists), batch_size)]
     var_size = [var_size[i:i + batch_size] for i in range(0, len(var_size), batch_size)]
     mus = [mus[i:i + batch_size] for i in range(0, len(mus), batch_size)]
     covs = [covs[i:i + batch_size] for i in range(0, len(covs), batch_size)]
 
     os.makedirs("plots/anomalies", exist_ok=True)
     for i, (x, target, _, _) in tqdm(enumerate(test)):
-        #if i == 10000:
+        #if i == 100000:
          #       break
-        for mu, cov, inp, pos, p, var_s in zip(mus[i], covs[i], x, target, probs[i], var_size[i]):
-            if p < threshold_probs:
+        for mu, cov, inp, pos, dist in zip(mus[i], covs[i], x, target, dists[i]):
+            if dist > threshold_dist:
                 count += 1
                 plot_input_target_output(inp, pos, mu, cov)
-                plt.title("anomaly due to unlikeliness: prob. = " + str(p))
+                plt.title("Anomaly with distance " + str(dist))
                 plt.savefig("plots/anomalies/anomaly_" + str(count) + ".png")
                 plt.close()
-            elif var_s > threshold_vars:
-                count += 1
-                plot_input_target_output(inp, pos, mu, cov)
-                plt.title("anomaly due to large variance: var size = " + str(var_s))
-                plt.savefig("plots/anomalies/anomaly_" + str(count) + ".png")
-                plt.close()
+            #elif var_s > threshold_vars:
+             #   count += 1
+              #  plot_input_target_output(inp, pos, mu, cov)
+               # plt.title("anomaly due to large variance: var size = " + str(var_s))
+               # plt.savefig("plots/anomalies/anomaly_" + str(count) + ".png")
+                #plt.close()
 
 
 def find_intervals_containing_timestamp(timestamp, intervals):
@@ -261,12 +265,12 @@ def anomalies_with_video(anomalies, path_sae_dump, dim_x, dim_y):
         store_video(video_dict[key][1:], path)
 
 
-def get_meaningful_unlikely_samples(samples_with_stats, prob_thr):
+def get_meaningful_unlikely_samples(samples_with_stats, dist_thr):
     # 4 - bbox input; 2 - target position; 2 - output mean; 3 - cholesky of output cov 
     anomaly_samples = []
 
     for sample in samples_with_stats:
-        if sample["prediction"]["probability_of_target"] < prob_thr:
+        if sample["prediction"]["distance_of_target"] > dist_thr:
             anomaly_samples.append(sample)
     
     # remove samples whose id only exists once

@@ -1,1 +1,1 @@
-import main
+import movementpredictor.data.main_data
