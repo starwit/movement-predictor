@@ -13,6 +13,7 @@ class RedisConfig(BaseModel):
     stream_prefix: str = 'undefined'
 
 class ModelConfig(BaseModel):
+    anomaly_threshold_test: float = -1
     parameters_path: Path = Path("model/parameters.json")
     weights_path: Path = Path("model/model_weights.pth")
     background_path: Path = Path("model/frame.pth")

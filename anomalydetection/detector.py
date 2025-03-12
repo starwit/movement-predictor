@@ -77,7 +77,8 @@ class Detector():
             with SuppressOutput():      # suppress tqdm progress bar
                 dataloader = makeTorchDataLoader(tracks, self._config.model.background_path)
                 outputs_with_stats = inference_with_stats(self.model, dataloader)
-                anomalies = get_meaningful_unlikely_samples(outputs_with_stats, self._parameters["anomaly_threshold"])
+                anomalies = get_meaningful_unlikely_samples(outputs_with_stats, self._parameters["anomaly_threshold"] 
+                                                            if self._config.model.anomaly_threshold_test < 0 else self._config.model.anomaly_threshold_test)
 
                 if len(anomalies) != 0:
                     log.info("anomaly found")
