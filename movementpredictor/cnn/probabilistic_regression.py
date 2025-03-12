@@ -48,7 +48,7 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
       target = target.to(device)
       input = input.to(device)
       mu, sigma = model(input)
-      loss = criterion(target, mu, sigma)
+      loss = criterion(input, target, mu, sigma)
       loss.backward()
       optimizer.step()
       train_losses.append(loss.item())
@@ -60,7 +60,7 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
             target = target.to(device)
             input = input.to(device)
             mu, sigma = model(input)
-            loss = criterion(target, mu, sigma)
+            loss = criterion(input, target, mu, sigma)
             val_losses.append(loss.item())
         
         train_loss = np.mean(train_losses)
@@ -244,11 +244,9 @@ class CNN(nn.Module):
         return mu, sigma
 
 
-
-
-def nll_loss(y_true, mu, sigma):
+def nll_loss(input, y_true, mu, sigma):
     """
-    Negative Log-Likelihood (NLL) Loss mit Regularisierung für die Kovarianzmatrix.
+    Weighted Negative Log-Likelihood (NLL) Loss with regularization
     
     Args:
         y_true (torch.Tensor): Wahrer Wert, Form (batch_size, 2).
@@ -265,22 +263,22 @@ def nll_loss(y_true, mu, sigma):
     sigma_stable = sigma + epsilon * torch.eye(sigma.size(-1)).to(sigma.device) 
     
     eigenvalues = torch.linalg.eigvalsh(sigma_stable)  # Nur reelle Eigenwerte
-    cond_number = torch.max(eigenvalues) / torch.min(eigenvalues + 1e-5)  # Vermeide Division durch Null
+    cond_number = torch.max(eigenvalues) / torch.min(eigenvalues + 1e-5)  # no zero-division
     
     #log_det = torch.logdet(sigma_stable)
     sign, log_det = torch.linalg.slogdet(sigma_stable)
     log_det = sign * log_det
 
-    y_position = y_true[:, 1]  # Extrahiere die y-Position (batch_size,)
-    weight = torch.exp(-y_position)  # Beispiel: Gewicht nimmt mit y-Position ab
-    weighted_log_det = weight * log_det
+    selected_channels = input[:, 2:4, :, :]
+    non_zero_pixels = (selected_channels != 0).any(dim=1)  
+    pixel_counts = non_zero_pixels.sum(dim=(1, 2))
 
     sigma_inv = torch.inverse(sigma_stable)
     mahalanobis = torch.bmm(torch.bmm(error.transpose(1, 2), sigma_inv), error)
     
     # NLL Loss: Mahalanobis-Distanz + log(det(sigma)) + Regularisierung
-    #loss = mahalanobis.squeeze() + 0.01 * log_det  + 0.001 * cond_number 
-    loss = mahalanobis.squeeze() + 0.01 * weighted_log_det + 0.001 * cond_number 
+    loss = mahalanobis.squeeze() + 0.01 * log_det  + 0.001 * cond_number 
+    loss = pixel_counts * mahalanobis.squeeze() + 0.1 * log_det + 0.01 * cond_number
 
     return loss.mean()
     
