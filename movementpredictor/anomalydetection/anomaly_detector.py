@@ -1,12 +1,11 @@
 import json
+from typing import List
 import torch
 import matplotlib.pyplot as plt
 import os
 import numpy as np
 import cv2
 from tqdm import tqdm
-from movementpredictor.data import dataset
-from movementpredictor.cnn import inferencing
 import logging
 from collections import Counter, defaultdict
 import math
@@ -14,7 +13,8 @@ import pybase64
 
 from movementpredictor.data.datamanagement import get_downsampled_tensor_img
 from movementpredictor.data.dataset import create_mask_tensor
-from movementpredictor.clustering.video_generation import store_video
+from movementpredictor.anomalydetection.video_generation import store_video
+from movementpredictor.cnn import inferencing
 
 from visionapi.sae_pb2 import SaeMessage
 from visionlib import saedump
@@ -44,7 +44,7 @@ def plot_input_target_output(x, y, mu, sigma):
     make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np, angle=angle_deg)
 
 
-def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None, angle=None, prob=None):
+def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None, angle=None, dist=None):
     plt.figure(figsize=(22, 7))
 
     plt.subplot(1, 3, 1)
@@ -67,13 +67,13 @@ def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None
     plt.axis('off')
 
     plt.subplot(1, 3, 3)
-    plt.title("prediction") if prob is None else plt.title("prediction, prob=" + str(prob))
+    plt.title("prediction") if dist is None else plt.title("prediction, distance=" + str(dist))
     frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_GRAY2RGB)
     circle = [round(mu[0]*frame_np.shape[-1]), round(mu[1]*frame_np.shape[-2])]
     cv2.circle(frame_rgb, circle, radius=2, color=(255, 0, 0), thickness=-1)
 
     sigma = inferencing.regularize_cov(sigma)
-    eigenvalues, eigenvectors = np.linalg.eigh(sigma*frame_np.shape[-1]*3)  # add factor for better visualization
+    eigenvalues, eigenvectors = np.linalg.eigh(sigma*frame_np.shape[-1]*20)  # add factor for better visualization
     order = eigenvalues.argsort()[::-1]
     eigenvalues = eigenvalues[order]
     eigenvectors = eigenvectors[:, order]
@@ -114,10 +114,10 @@ def visualValidation(model, dataloader) -> None:
             plt.close()
 
 
-def calculate_and_visualize_threshold(samples_with_stats, percentage_p=99.99):
-    '''computes the thresholds for finding an anomaly based on the probability density and variance'''
+def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.InferenceResult], percentage_p=99.99):
+    '''computes the thresholds for finding an anomaly based on the variance based distance to the mean'''
 
-    dists = [sample["prediction"]["distance_of_target"] for sample in samples_with_stats]
+    dists = [sample.prediction.distance_of_target for sample in samples_with_stats]
     threshold_dists = np.percentile(dists, percentage_p)
     log.info("Distance-threshold: " + str(threshold_dists))
 
@@ -126,7 +126,7 @@ def calculate_and_visualize_threshold(samples_with_stats, percentage_p=99.99):
     plt.xlabel('dist')
     plt.ylabel('amount')
     plt.axvline(x=threshold_dists, color='black', linestyle='dashed', label='threshold')
-    plt.savefig("plots/probs.png")
+    plt.savefig("plots/distances.png")
     plt.show()
     plt.clf()
 
@@ -146,7 +146,7 @@ def calculate_and_visualize_threshold(samples_with_stats, percentage_p=99.99):
     plt.show()
     plt.clf()
 
-    return threshold_probs, threshold_vars''
+    return threshold_dists, threshold_vars''
 '''
 
 
@@ -161,24 +161,24 @@ def store_parameter(path_model, dist_thr, percentage_anomaly):
         json.dump(paras, json_file, indent=4)
 
 
-def plot_unlikely_samples(test, threshold_dist, samples_with_stats):
+def plot_unlikely_samples(test, threshold_dist, samples_with_stats: List[inferencing.InferenceResult]):
     count = 0
     batch_size = test.batch_size
 
-    dists = [sample["prediction"]["distance_of_target"] for sample in samples_with_stats]
+    dists = [sample.prediction.distance_of_target for sample in samples_with_stats]
     #var_size = [np.diag(sample["prediction"]["variance"]).sum() for sample in samples_with_stats]
-    mus = [sample["prediction"]["mean"] for sample in samples_with_stats]
-    covs = [sample["prediction"]["variance"] for sample in samples_with_stats]
+    mus = [sample.prediction.mean for sample in samples_with_stats]
+    covs = [sample.prediction.variance for sample in samples_with_stats]
 
     dists = [dists[i:i + batch_size] for i in range(0, len(dists), batch_size)]
-    var_size = [var_size[i:i + batch_size] for i in range(0, len(var_size), batch_size)]
+    #var_size = [var_size[i:i + batch_size] for i in range(0, len(var_size), batch_size)]
     mus = [mus[i:i + batch_size] for i in range(0, len(mus), batch_size)]
     covs = [covs[i:i + batch_size] for i in range(0, len(covs), batch_size)]
 
     os.makedirs("plots/anomalies", exist_ok=True)
     for i, (x, target, _, _) in tqdm(enumerate(test)):
-        #if i == 100000:
-         #       break
+        if i == 10000:
+                break
         for mu, cov, inp, pos, dist in zip(mus[i], covs[i], x, target, dists[i]):
             if dist > threshold_dist:
                 count += 1
@@ -198,12 +198,12 @@ def find_intervals_containing_timestamp(timestamp, intervals):
     return [interval for interval in intervals if interval[1] <= timestamp <= interval[2]]
 
 
-def anomalies_with_video(anomalies, path_sae_dump, dim_x, dim_y):
+def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_dump, dim_x, dim_y):
     anomaly_dict = defaultdict(list)
-    anomaly_ts_int = [int(anomaly["timestamp"]) for anomaly in anomalies]
+    anomaly_ts_int = [int(anomaly.timestamp) for anomaly in anomalies]
 
     for anomaly, ts in zip(anomalies, anomaly_ts_int):
-        anomaly_dict[anomaly["obj_id"]].append([ts, anomaly])
+        anomaly_dict[anomaly.obj_id].append([ts, anomaly])
     
     video_dict = defaultdict(list)
     for key in anomaly_dict.keys():
@@ -254,9 +254,9 @@ def anomalies_with_video(anomalies, path_sae_dump, dim_x, dim_y):
             frame_info = frame_infos[0]
             frame_tensor = get_downsampled_tensor_img(frame_info[0], dim_x, dim_y)
 
-            mask_interest_np = create_mask_tensor(dim_x, dim_y, [anomaly["input"]], scale=False).numpy()
-            make_plot(frame_tensor.numpy(), mask_interest_np, anomaly["target"].cpu().numpy(), anomaly["prediction"]["mean"], 
-                      anomaly["prediction"]["variance"], prob=anomaly["prediction"]["probability_of_target"])
+            mask_interest_np = create_mask_tensor(dim_x, dim_y, [anomaly.input], scale=False).numpy()
+            make_plot(frame_tensor.numpy(), mask_interest_np, anomaly.target.cpu().numpy(), anomaly.prediction.mean, 
+                      anomaly.prediction.variance, dist=anomaly.prediction.distance_of_target)
             
             plt.savefig(path + "a" + str(int(img_count)) + ".png")
             img_count += 1
@@ -265,16 +265,16 @@ def anomalies_with_video(anomalies, path_sae_dump, dim_x, dim_y):
         store_video(video_dict[key][1:], path)
 
 
-def get_meaningful_unlikely_samples(samples_with_stats, dist_thr):
+def get_meaningful_unlikely_samples(samples_with_stats: List[inferencing.InferenceResult], dist_thr) -> List[inferencing.InferenceResult]:
     # 4 - bbox input; 2 - target position; 2 - output mean; 3 - cholesky of output cov 
-    anomaly_samples = []
+    anomaly_samples: List[inferencing.InferenceResult] = []
 
     for sample in samples_with_stats:
-        if sample["prediction"]["distance_of_target"] > dist_thr:
+        if sample.prediction.distance_of_target > dist_thr:
             anomaly_samples.append(sample)
     
     # remove samples whose id only exists once
-    anomaly_ids = [sample["obj_id"] for sample in anomaly_samples]
+    anomaly_ids = [sample.obj_id for sample in anomaly_samples]
     id_counts = Counter(anomaly_ids)
     ids_to_remove = {id for id, count in id_counts.items() if count == 1}
     indices_to_remove = [index for index, id in enumerate(anomaly_ids) if id in ids_to_remove]

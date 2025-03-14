@@ -4,8 +4,8 @@ sys.path.append('/home/starwit01/workspaces/hanna/movement-predictor')
 from movementpredictor.cnn import probabilistic_regression
 from movementpredictor.config import ModelConfig
 from movementpredictor.cnn.inferencing import inference_with_stats
-from movementpredictor.clustering import clusterer
-from movementpredictor.clustering import anomaly_detector
+from movementpredictor.anomalydetection import clusterer
+from movementpredictor.anomalydetection import anomaly_detector
 from movementpredictor.data import dataset
 
 import logging
@@ -32,7 +32,7 @@ def main():
     samples_with_stats = inference_with_stats(model, test)
     dist_thr = anomaly_detector.calculate_and_visualize_threshold(samples_with_stats, config.percentage_anomaly)
     anomaly_detector.store_parameter(config.path_model, dist_thr, config.percentage_anomaly)
-    #anomaly_detector.plot_unlikely_samples(test, dist_thr, samples_with_stats) 
+    anomaly_detector.plot_unlikely_samples(test, dist_thr, samples_with_stats) 
 
     anomalies = anomaly_detector.get_meaningful_unlikely_samples(samples_with_stats, dist_thr)
     anomaly_detector.anomalies_with_video(anomalies, config.path_sae_data, config.dim_x, config.dim_y)

@@ -4,28 +4,44 @@ from typing import Dict
 from movementpredictor.data.trackedobjectposition import TrackedObjectPosition
 from tqdm import tqdm
 import numpy as np
-from filterpy.kalman import KalmanFilter
 from sklearn.linear_model import TheilSenRegressor
 from scipy.signal import medfilt
 
 
-class DataFilterer:
+class DataFilterer():
     log = logging.getLogger(__name__)
-    max_angle_change = 50
-    max_millisec_between_3_detections = 2000
     min_movement = 0.05
     min_length = 7
+    time_window_movement = 10000
 
     def apply_filtering(self, tracking_list: list[TrackedObjectPosition]) -> Dict[str, list[TrackedObjectPosition]]:
-        self.log.debug("Start filtering tracks")
+        """
+        Sort out tracks of vehicles that have not been moving for a certain time and smooth trajectory
+
+        Args:
+            tracking_list: a list containing single tracks of type TrackedObjectPosition, on which anomaly detection should be performed later
+        
+        Returns:
+            dict: the adapted tracks are grouped together to trajectories -> key: object id, value: list[TrackedObjectPosition] which is this object's trajectory
+        """
+        self.log.info("Start filtering tracks")
 
         mapping = DataFilterer._map_tracks_to_id(tracking_list)
-        mapping = self._extract_vehicles_with_movement(mapping)
+        mapping = self._extract_vehicles_with_movement2(mapping)
         mapping = self._smooth_trajectories_add_movement_angle(mapping)
 
         return mapping
     
     def only_smoothing(self, tracking_list: list[TrackedObjectPosition]) -> Dict[str, list[TrackedObjectPosition]]:
+        """
+        Smoothes trajectories without previous filtering. Should only be used for small tests not when performing the real anomaly detection!
+
+        Args:
+            tracking_list: a list containing single tracks of type TrackedObjectPosition
+        
+        Returns:
+            dict: the adapted tracks are grouped together to trajectories -> key: object id, value: list[TrackedObjectPosition] which is this object's trajectory
+        """
         mapping = DataFilterer._map_tracks_to_id(tracking_list)
         mapping = self._smooth_trajectories_add_movement_angle(mapping)
 
@@ -61,6 +77,42 @@ class DataFilterer:
                 if max_y - min_y < self.min_movement:
                     continue
             new_mapping[key] = tracks_of_object
+        
+        return new_mapping
+    
+    def _extract_vehicles_with_movement2(self, mapping):
+        self.log.info("filter out parts without movement")
+        new_mapping = {}
+        for key, tracks_of_object in mapping.items():
+
+            if len(tracks_of_object) < self.min_length:
+                continue
+            
+            # skip trajectories with no movement at all
+            min_x = min(tracks_of_object, key=lambda obj: obj.get_center()[0]).get_center()[0]
+            max_x = max(tracks_of_object, key=lambda obj: obj.get_center()[0]).get_center()[0]
+            total_movement = np.linalg.norm(min_x - max_x)
+
+            if total_movement < self.min_movement:
+                continue
+            
+            # sort out parts without movement
+            timestamps = np.array([track.get_capture_ts() for track in tracks_of_object])
+            traj = np.array([track.get_center() for track in tracks_of_object])
+            keep = np.zeros(len(traj), dtype=bool)
+
+            for i, (timestamp, point) in enumerate(zip(timestamps, traj)):
+                start = np.searchsorted(timestamps, timestamp - self.time_window_movement, side='left')
+                end = np.searchsorted(timestamps, timestamp + self.time_window_movement, side='right')
+                
+                neighbors = traj[start:end]
+                distances = np.linalg.norm(neighbors - point, axis=1)
+                if np.any(distances >= self.min_movement):
+                    keep[i] = True
+            
+            # Filter trajectory
+            filtered_traj = [tracks_of_object[i] for i in range(len(tracks_of_object)) if keep[i]]
+            new_mapping[key] = filtered_traj
         
         return new_mapping
 
@@ -159,3 +211,6 @@ class DataFilterer:
         elif delta_x < 0 and delta_y < 0:
             angle = 180. + angle
         return angle
+
+
+__all__ = ["DataFilterer"]
