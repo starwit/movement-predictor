@@ -40,7 +40,7 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
   print("train size: ", len(train))
   print("val size: ", len(val))
 
-  for epoch in range(2):
+  for epoch in range(5):
 
     for count, (input, target, _, _) in tqdm(enumerate(train)):
       
@@ -48,7 +48,7 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
       target = target.to(device)
       input = input.to(device)
       mu, sigma = model(input)
-      loss = criterion(input, target, mu, sigma)
+      loss = criterion(target, mu, sigma)
       loss.backward()
       optimizer.step()
       train_losses.append(loss.item())
@@ -60,7 +60,7 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
             target = target.to(device)
             input = input.to(device)
             mu, sigma = model(input)
-            loss = criterion(input, target, mu, sigma)
+            loss = criterion(target, mu, sigma)
             val_losses.append(loss.item())
         
         train_loss = np.mean(train_losses)
@@ -197,6 +197,9 @@ class advancedCNN(nn.Module):
 
 
 class CNN(nn.Module):
+    """
+    Convolutional Neural Network (pytorch model) to make a prediction on a vehicles position a certain time ahead.
+    """
 
     def __init__(self):
         super(CNN, self).__init__()
@@ -244,9 +247,9 @@ class CNN(nn.Module):
         return mu, sigma
 
 
-def nll_loss(input, y_true, mu, sigma):
+def nll_loss(y_true, mu, sigma):
     """
-    Weighted Negative Log-Likelihood (NLL) Loss with regularization
+    Negative Log-Likelihood (NLL) Loss with regularization
     
     Args:
         y_true (torch.Tensor): Wahrer Wert, Form (batch_size, 2).
@@ -269,16 +272,16 @@ def nll_loss(input, y_true, mu, sigma):
     sign, log_det = torch.linalg.slogdet(sigma_stable)
     log_det = sign * log_det
 
-    selected_channels = input[:, 2:4, :, :]
-    non_zero_pixels = (selected_channels != 0).any(dim=1)  
-    pixel_counts = non_zero_pixels.sum(dim=(1, 2))
+    #selected_channels = input[:, 2:4, :, :]
+    #non_zero_pixels = (selected_channels != 0).any(dim=1)  
+    #pixel_counts = non_zero_pixels.sum(dim=(1, 2))
 
     sigma_inv = torch.inverse(sigma_stable)
     mahalanobis = torch.bmm(torch.bmm(error.transpose(1, 2), sigma_inv), error)
     
     # NLL Loss: Mahalanobis-Distanz + log(det(sigma)) + Regularisierung
-    loss = mahalanobis.squeeze() + 0.01 * log_det  + 0.001 * cond_number 
-    loss = pixel_counts * mahalanobis.squeeze() + 0.1 * log_det + 0.01 * cond_number
+    loss = mahalanobis.squeeze() + 0.01 * log_det + 0.0002 * cond_number 
+    #loss =  mahalanobis.squeeze() + 0.01 * log_det + 0.001 * cond_number
 
     return loss.mean()
     

@@ -1,3 +1,4 @@
+from typing import Dict
 import torch
 from torch.utils.data import ConcatDataset, DataLoader, Dataset, random_split
 import matplotlib.pyplot as plt
@@ -9,6 +10,8 @@ import os
 from collections import defaultdict
 import pickle
 import math
+
+from movementpredictor.data.trackedobjectposition import TrackedObjectPosition
 
 
 log = logging.getLogger(__name__)
@@ -87,7 +90,20 @@ def getTorchDataLoader(dataset, val_split=False, shuffle=True):
         return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=True)
 
 
-def makeTorchDataLoader(tracks, path_frame):
+def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], path_frame: str) -> DataLoader:
+    """
+    Creates a pytorch DataLoader for make the data progressible for pytorch deep learning models.
+    Based on a background_frame and the tracking information the model's input (frame containing boundingboxes) 
+    and the target (vehicles position 1 second after input scene) are created and put into one dataset.
+    
+    Args:
+        tracks: dict with trajectories (key: object id, value: list of this object's tracks)
+        path_frame: path to the stored background frame that is the background information of all models inputs
+    
+    Retruns: 
+        DataLoader: pytorch Dataloader to make easy use of the dataset in batches
+
+    """
     raw_dataset = make_input_target_pairs(tracks)
     frame = torch.load(path_frame)
     torch_dataset = CNNData(frame, raw_dataset)
