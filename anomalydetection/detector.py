@@ -1,24 +1,16 @@
 import logging
 import os
 import sys
-
 import ast
+from typing import List
 import torch
-import torch.nn as nn
 
-from movementpredictor.data.datafilterer import DataFilterer
-from movementpredictor.data.dataset import makeTorchDataLoader
-from movementpredictor.cnn.probabilistic_regression import CNN
-from movementpredictor.cnn.inferencing import inference_with_stats
-from movementpredictor.clustering.anomaly_detector import get_meaningful_unlikely_samples
-#from aesanomalydetection.datafilterer import DataFilterer
-#from aesanomalydetection.recurrentae.ae import LSTM_AE
-#from aesanomalydetection.recurrentae.dataset import makeTorchPredictionDataSet
-
+from movementpredictor import DataFilterer, makeTorchDataLoader, CNN, inference_with_stats, get_meaningful_unlikely_samples, InferenceResult
 from visionapi.anomaly_pb2 import AnomalyMessage, Point, Trajectory
 
 from anomalydetection.config import AnomalyDetectionConfig
 from anomalydetection.modelinfocollector import ModelInfoCollector
+
 
 log = logging.getLogger(__name__)
 
@@ -85,12 +77,12 @@ class Detector():
 
         return self._write_anomaly_message(anomalies, frames, tracks)
     
-    def _write_anomaly_message(self, anomalies, frames, tracks) -> AnomalyMessage:
+    def _write_anomaly_message(self, anomalies: List[InferenceResult], frames, tracks) -> AnomalyMessage:
         anomaly_msg = AnomalyMessage()
         
         if len(anomalies) > 0:
             anomaly_trajectories = {}
-            anomaly_ids = [anomaly["obj_id"] for anomaly in anomalies]
+            anomaly_ids = [anomaly.obj_id for anomaly in anomalies]
 
             for id in anomaly_ids:
                 anomaly_trajectories[id] = tracks[ast.literal_eval(id)]
@@ -107,15 +99,14 @@ class Detector():
         
         return anomaly_msg
 
-    def _map_anomaly(self, total_anomalies, anomaly_trajectory) -> Trajectory:
+    def _map_anomaly(self, total_anomalies: List[InferenceResult], anomaly_trajectory) -> Trajectory:
         trajectory = Trajectory()
         trajectory.object_id = anomaly_trajectory[0].get_uuid()
         trajectory.class_id = anomaly_trajectory[0].get_class_id()
 
-        anomaly_trigger_ts = [a["timestamp"] for a in total_anomalies if a["obj_id"] == trajectory.object_id]
+        anomaly_trigger_ts = [a.timestamp for a in total_anomalies if a.obj_id == trajectory.object_id]
 
         for track in anomaly_trajectory:
-            #trajectory_point = TrajectoryPoint()
             trajectory_point = trajectory.trajectory_points.add()
 
             center_point = Point()
@@ -129,5 +120,4 @@ class Detector():
                 trajectory_point.anomaly_trigger = False
             trajectory_point.timestamp_utc_ms = track.get_capture_ts()
 
-        #print(trajectory)
         return trajectory

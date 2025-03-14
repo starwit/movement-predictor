@@ -1,8 +1,5 @@
-import time
 import logging
-from datetime import datetime, timezone
-from movementpredictor.data.trackedobjectposition import TrackedObjectPosition
-
+from movementpredictor import TrackedObjectPosition
 
 
 class TrackCollector:
@@ -51,7 +48,7 @@ class TrackCollector:
 
             self.tracks.append(tracked_object_pos)
 
-        #self.log.debug(f"Removed {border_box_count} detections on frame border.")
+        self.log.debug(f"Removed {border_box_count} detections on frame border.")
 
 
     def get_latest_data(self):
