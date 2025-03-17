@@ -55,10 +55,10 @@ class Detector():
       
     def filter_tracks(self, tracks):
         if len(tracks) != 0:
-            log.info(f"num tracks before filtering: {len(tracks)}")
+            log.info(f"num single tracks before filtering: {len(tracks)}")
             if self._config.filtering:
                 tracks = DataFilterer().apply_filtering(tracks)
-                log.info(f"num tracks after filtering: {len(tracks)}")
+                log.info(f"num trajectories after filtering: {len(tracks)}")
             else:
                 tracks = DataFilterer().only_smoothing(tracks)
                 log.info(f"TESTING WITHOUT FILTERING")
@@ -71,7 +71,6 @@ class Detector():
                 outputs_with_stats = inference_with_stats(self.model, dataloader)
                 anomalies = get_meaningful_unlikely_samples(outputs_with_stats, self._parameters["anomaly_threshold"] 
                                                             if self._config.model.anomaly_threshold_override is None else self._config.model.anomaly_threshold_override)
-
                 if len(anomalies) != 0:
                     log.info("anomaly found")
 

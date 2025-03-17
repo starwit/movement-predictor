@@ -40,6 +40,8 @@ class AnomalyDetection:
         if len(tracks) == 0:
             return None
         filtered_data = self._detector.filter_tracks(tracks)
+        if len(filtered_data) == 0:
+            return None
         anomaly_message = self._detector.examine_tracks_for_anomalies(filtered_data, frames)
 
         if len(anomaly_message.trajectories) == 0:
