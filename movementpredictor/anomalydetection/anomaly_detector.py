@@ -167,8 +167,8 @@ def plot_unlikely_samples(test, threshold_dist, samples_with_stats: List[inferen
 
     dists = [sample.prediction.distance_of_target for sample in samples_with_stats]
     #var_size = [np.diag(sample["prediction"]["variance"]).sum() for sample in samples_with_stats]
-    mus = [sample.prediction.mean for sample in samples_with_stats]
-    covs = [sample.prediction.variance for sample in samples_with_stats]
+    mus = [np.array(sample.prediction.mean) for sample in samples_with_stats]
+    covs = [np.array(sample.prediction.variance) for sample in samples_with_stats]
 
     dists = [dists[i:i + batch_size] for i in range(0, len(dists), batch_size)]
     #var_size = [var_size[i:i + batch_size] for i in range(0, len(var_size), batch_size)]
@@ -255,8 +255,8 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
             frame_tensor = get_downsampled_tensor_img(frame_info[0], dim_x, dim_y)
 
             mask_interest_np = create_mask_tensor(dim_x, dim_y, [anomaly.input], scale=False).numpy()
-            make_plot(frame_tensor.numpy(), mask_interest_np, anomaly.target.cpu().numpy(), anomaly.prediction.mean, 
-                      anomaly.prediction.variance, dist=anomaly.prediction.distance_of_target)
+            make_plot(frame_tensor.numpy(), mask_interest_np, np.array(anomaly.target), np.array(anomaly.prediction.mean), 
+                      np.array(anomaly.prediction.variance), dist=anomaly.prediction.distance_of_target)
             
             plt.savefig(path + "a" + str(int(img_count)) + ".png")
             img_count += 1
