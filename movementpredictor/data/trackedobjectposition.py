@@ -1,15 +1,13 @@
-import base64
-from pydantic import BaseModel
-from typing import Optional, List
+from typing import List
 
 
-class TrackedObjectPosition(BaseModel):
-    capture_ts: Optional[int] = None
-    uuid: Optional[str] = None
-    class_id: Optional[int] = None
-    center: Optional[List[float]] = None  # [x, y]
-    bbox: Optional[List[List[float]]] = None  # [[x1, y1], [x2, y2]]
-    movement_angle: Optional[float] = None
+class TrackedObjectPosition():
+    capture_ts: int = None
+    uuid: str = None
+    class_id: int = None
+    center: float = None # [x, y]
+    bbox: List[List[float]] = None  # [[x1, y1], [x2, y2]]
+    movement_angle: float = None
 
     def set_class_id(self, class_id: int):
         self.class_id = class_id

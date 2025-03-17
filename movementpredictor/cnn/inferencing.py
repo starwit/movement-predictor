@@ -6,21 +6,17 @@ from typing import List, Dict
 
 
 class PredictionStats(BaseModel):
-    mean: np.ndarray
-    variance: np.ndarray
+    mean: List[float]
+    variance: List[List[float]]
     distance_of_target: float
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class InferenceResult(BaseModel):
-    input: list[list[int]]
-    target: torch.Tensor
+    input: List[List[int]]
+    target: List[float]
     prediction: PredictionStats
     timestamp: str
     obj_id: str
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader) -> List[InferenceResult]:
@@ -47,10 +43,11 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
 
             mu_batch, cov_batch = model(x)
             mu_batch, cov_batch = mu_batch.detach().cpu().numpy(), cov_batch.detach().cpu().numpy()
+            target = target.detach().cpu().numpy()
 
             for inp, mu, cov, pos, timestamp, obj_id in zip(x, mu_batch, cov_batch, target, ts, id):
                 cov = regularize_cov(cov)
-    
+
                 sigma_stable = cov + 1e-6 * np.eye(cov.shape[0])
                 sigma_inv = np.linalg.inv(sigma_stable)
                 diff = (pos - mu).reshape(-1, 1) 
@@ -59,8 +56,8 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
 
                 stats = InferenceResult(
                     input=get_bounding_box_info(inp),
-                    target=pos,
-                    prediction=PredictionStats(mean=mu, variance=cov, distance_of_target=dist),
+                    target=pos.tolist(),
+                    prediction=PredictionStats(mean=mu.tolist(), variance=cov.tolist(), distance_of_target=dist),
                     timestamp=timestamp,
                     obj_id=obj_id
                 )
@@ -69,7 +66,7 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
     return samples_with_stats
 
 
-def regularize_cov(cov, max_cond=6, min_var=1e-5, min_achsis=0.015):
+def regularize_cov(cov, max_cond=6):
     #eigenvalues, eigenvectors = np.linalg.eigh(cov)
     #eigenvalues = np.maximum(eigenvalues, min_achsis)
     #cov = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T + min_var * np.eye(cov.shape[0])
