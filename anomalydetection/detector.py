@@ -70,7 +70,7 @@ class Detector():
                 dataloader = makeTorchDataLoader(tracks, self._config.model.background_path)
                 outputs_with_stats = inference_with_stats(self.model, dataloader)
                 anomalies = get_meaningful_unlikely_samples(outputs_with_stats, self._parameters["anomaly_threshold"] 
-                                                            if self._config.model.anomaly_threshold_test < 0 else self._config.model.anomaly_threshold_test)
+                                                            if self._config.model.anomaly_threshold_override is None else self._config.model.anomaly_threshold_override)
 
                 if len(anomalies) != 0:
                     log.info("anomaly found")

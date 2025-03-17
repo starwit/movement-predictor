@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Annotated
 from visionlib.pipeline.settings import LogLevel, YamlConfigSettingsSource
+from typing import Optional
 
 
 class RedisConfig(BaseModel):
@@ -13,7 +14,7 @@ class RedisConfig(BaseModel):
     stream_prefix: str = 'undefined'
 
 class ModelConfig(BaseModel):
-    anomaly_threshold_test: float = -1
+    anomaly_threshold_override: Optional[float] = None
     parameters_path: Path = Path("model/parameters.json")
     weights_path: Path = Path("model/model_weights.pth")
     background_path: Path = Path("model/frame.pth")

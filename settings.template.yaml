@@ -11,7 +11,7 @@ redisOut:
   stream_prefix: anomalydetection
 filtering: True
 model:
-  anomaly_threshold_test: 0.1          # only for testing: set -1 or remove if not testing     
+  anomaly_threshold_override:           # only for testing:  remove if not testing     
   parameters_path: model/parameters.json
   weights_path: model/model_weights.pth
   background_path: model/frame.pth
