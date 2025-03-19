@@ -72,8 +72,8 @@ def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None
     circle = [round(mu[0]*frame_np.shape[-1]), round(mu[1]*frame_np.shape[-2])]
     cv2.circle(frame_rgb, circle, radius=2, color=(255, 0, 0), thickness=-1)
 
-    sigma = inferencing.regularize_cov(sigma)
-    eigenvalues, eigenvectors = np.linalg.eigh(sigma*frame_np.shape[-1]*20)  # add factor for better visualization
+    #sigma = inferencing.regularize_cov(sigma)
+    eigenvalues, eigenvectors = np.linalg.eigh(sigma*frame_np.shape[-1]*0.1)  # add factor for better visualization
     order = eigenvalues.argsort()[::-1]
     eigenvalues = eigenvalues[order]
     eigenvectors = eigenvectors[:, order]
@@ -100,12 +100,12 @@ def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None
     plt.axis('off')
 
 
-def visualValidation(model, dataloader) -> None:
+def visualValidation(model, dataloader, num_plots=100) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     with torch.no_grad():
         for count, (x, target, _, _) in enumerate(dataloader):
-            if count >= 80: break
+            if count >= num_plots: break
             model_data = torch.tensor(x).to(device)
             mu, sigma = model(model_data)
 
@@ -114,7 +114,7 @@ def visualValidation(model, dataloader) -> None:
             plt.close()
 
 
-def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.InferenceResult], percentage_p=99.99):
+def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.InferenceResult], percentage_p=99.99, path=None):
     '''computes the thresholds for finding an anomaly based on the variance based distance to the mean'''
 
     dists = [sample.prediction.distance_of_target for sample in samples_with_stats]
@@ -126,7 +126,7 @@ def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.Infer
     plt.xlabel('dist')
     plt.ylabel('amount')
     plt.axvline(x=threshold_dists, color='black', linestyle='dashed', label='threshold')
-    plt.savefig("plots/distances.png")
+    plt.savefig("plots/distances.png" if path is None else path)
     plt.show()
     plt.clf()
 
@@ -233,7 +233,7 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
             for key in fitting_keys:
                 frame_info = [proto.frame, None]
                 for detection in proto.detections:
-                    if str(key[0]) == str(detection.object_id):
+                    if key[0] == str(detection.object_id.hex()):
                         frame_info[1] = detection.bounding_box
                         break
                 video_dict[key].append(frame_info)
@@ -248,8 +248,6 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
         for ts, anomaly in video_dict[key][0]:
             # create plots
             frame_infos = [frame_info for frame_info in video_dict[key][1:] if frame_info[0].timestamp_utc_ms == ts]
-            if len(frame_infos) != 1: 
-                log.error("ALARRRRM!!! " + str(frame_info))
             
             frame_info = frame_infos[0]
             frame_tensor = get_downsampled_tensor_img(frame_info[0], dim_x, dim_y)
@@ -267,11 +265,7 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
 
 def get_meaningful_unlikely_samples(samples_with_stats: List[inferencing.InferenceResult], dist_thr) -> List[inferencing.InferenceResult]:
     # 4 - bbox input; 2 - target position; 2 - output mean; 3 - cholesky of output cov 
-    anomaly_samples: List[inferencing.InferenceResult] = []
-
-    for sample in samples_with_stats:
-        if sample.prediction.distance_of_target > dist_thr:
-            anomaly_samples.append(sample)
+    anomaly_samples = get_unlikely_samples(samples_with_stats, dist_thr)
     
     # remove samples whose id only exists once
     anomaly_ids = [sample.obj_id for sample in anomaly_samples]
@@ -282,3 +276,13 @@ def get_meaningful_unlikely_samples(samples_with_stats: List[inferencing.Inferen
     anomalies = [sample for index, sample in enumerate(anomaly_samples) if index not in indices_to_remove]
 
     return anomalies
+
+
+def get_unlikely_samples(samples_with_stats: List[inferencing.InferenceResult], dist_thr) -> List[inferencing.InferenceResult]:
+    anomaly_samples: List[inferencing.InferenceResult] = []
+
+    for sample in samples_with_stats:
+        if sample.prediction.distance_of_target > dist_thr:
+            anomaly_samples.append(sample)
+    
+    return anomaly_samples

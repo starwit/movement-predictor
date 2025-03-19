@@ -1,3 +1,4 @@
+import os
 import sys
 sys.path.append('/home/starwit01/workspaces/hanna/movement-predictor')
 
@@ -24,15 +25,15 @@ def main():
     model.to(device)
     model.eval()
 
-    ds = dataset.merge_datasets(config.path_store_data, "clustering")
+    ds = dataset.getTorchDataSet(os.path.join(config.path_store_data, "clustering"))
     test = dataset.getTorchDataLoader(ds, shuffle=False)
 
-    anomaly_detector.visualValidation(model, test)
+    anomaly_detector.visualValidation(model, test, num_plots=100)
     #return
     samples_with_stats = inference_with_stats(model, test)
     dist_thr = anomaly_detector.calculate_and_visualize_threshold(samples_with_stats, config.percentage_anomaly)
     anomaly_detector.store_parameter(config.path_model, dist_thr, config.percentage_anomaly)
-    anomaly_detector.plot_unlikely_samples(test, dist_thr, samples_with_stats) 
+    #anomaly_detector.plot_unlikely_samples(test, dist_thr, samples_with_stats) 
 
     anomalies = anomaly_detector.get_meaningful_unlikely_samples(samples_with_stats, dist_thr)
     anomaly_detector.anomalies_with_video(anomalies, config.path_sae_data, config.dim_x, config.dim_y)

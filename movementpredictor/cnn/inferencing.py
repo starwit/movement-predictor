@@ -46,7 +46,7 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
             target = target.detach().cpu().numpy()
 
             for inp, mu, cov, pos, timestamp, obj_id in zip(x, mu_batch, cov_batch, target, ts, id):
-                cov = regularize_cov(cov)
+                #cov = regularize_cov(cov)
 
                 sigma_stable = cov + 1e-6 * np.eye(cov.shape[0])
                 sigma_inv = np.linalg.inv(sigma_stable)
@@ -66,10 +66,10 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
     return samples_with_stats
 
 
-def regularize_cov(cov, max_cond=6):
+def regularize_cov(cov, max_cond=8, min_achsis=0.01):
     #eigenvalues, eigenvectors = np.linalg.eigh(cov)
     #eigenvalues = np.maximum(eigenvalues, min_achsis)
-    #cov = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T + min_var * np.eye(cov.shape[0])
+    #cov = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
 
     eigvals, eigvecs = np.linalg.eigh(cov)  
 

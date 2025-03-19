@@ -3,7 +3,7 @@ from movementpredictor.data.datafilterer import DataFilterer
 from movementpredictor.config import ModelConfig
 from movementpredictor.data import dataset
 
-import gc
+import os
 import logging
 
 log = logging.getLogger(__name__)
@@ -18,13 +18,12 @@ def main():
     for i in range(12):
         trackedObjects = getTrackedBaseData(config.path_sae_data, i)           # 1'220'175 it in total
         trackedObjects = DataFilterer().apply_filtering(trackedObjects) 
-
         dataset.store_data(trackedObjects, config.path_store_data, i)
             
-    train_ds = dataset.getTorchDataSet(config.path_store_data, "train_cnn", 0)
+    train_ds = dataset.getTorchDataSet(os.path.join(config.path_store_data, "clustering"))
     train_dl = dataset.getTorchDataLoader(train_ds, shuffle=False)
 
-    dataset.plotDataSamples(train_dl, 20)
+    dataset.plotDataSamples(train_dl, 50)
 
 
 if __name__ == "__main__":

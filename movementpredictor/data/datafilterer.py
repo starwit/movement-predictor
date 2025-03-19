@@ -27,7 +27,7 @@ class DataFilterer():
         self.log.info("Start filtering tracks")
 
         mapping = DataFilterer._map_tracks_to_id(tracking_list)
-        mapping = self._extract_vehicles_with_movement2(mapping)
+        mapping = self._extract_vehicles_with_movement(mapping)
         mapping = self._smooth_trajectories_add_movement_angle(mapping)
 
         return mapping
@@ -64,23 +64,8 @@ class DataFilterer():
             new_mapping[key] = tracks_of_object
             
         return new_mapping
-
-    def _extract_vehicles_with_movement(self, mapping):
-        new_mapping = {}
-
-        for key, tracks_of_object in mapping.items():
-            min_x = min(tracks_of_object, key=lambda obj: obj.get_center()[0]).get_center()[0]
-            max_x = max(tracks_of_object, key=lambda obj: obj.get_center()[0]).get_center()[0]
-            if max_x - min_x < self.min_movement:
-                min_y = min(tracks_of_object, key=lambda obj: obj.get_center()[1]).get_center()[1]
-                max_y = max(tracks_of_object, key=lambda obj: obj.get_center()[1]).get_center()[1]
-                if max_y - min_y < self.min_movement:
-                    continue
-            new_mapping[key] = tracks_of_object
-        
-        return new_mapping
     
-    def _extract_vehicles_with_movement2(self, mapping):
+    def _extract_vehicles_with_movement(self, mapping):
         self.log.info("filter out parts without movement")
         new_mapping = {}
         for key, tracks_of_object in mapping.items():

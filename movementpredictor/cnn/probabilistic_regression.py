@@ -33,7 +33,8 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
   val_losses = []
   no_improvement = 0
 
-  train_ds, val_ds = dataset.merge_and_split_datasets(path_data)
+  train_ds = dataset.getTorchDataSet(os.path.join(path_data, "train_cnn"))
+  val_ds = dataset.getTorchDataSet(os.path.join(path_data, "clustering"), 0.05)
   train = dataset.getTorchDataLoader(train_ds)
   val = dataset.getTorchDataLoader(val_ds)
     
@@ -77,7 +78,7 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
           print("no improvement")
           no_improvement += 1
 
-        if no_improvement > 10: 
+        if no_improvement > 6: 
           break
         
         model = model.train()
@@ -85,7 +86,7 @@ def trainAndStoreCNN(path_data, path_model) -> Tuple[nn.Module, Dict[str, list[f
         train_losses = []
         val_losses = []
 
-    if no_improvement > 10:
+    if no_improvement > 6:
       break
 
   model.load_state_dict(best_model_wts)
@@ -109,94 +110,53 @@ def store_parameters(history, config: ModelConfig):
       json.dump(paras, json_file, indent=4)
 
 
-class advancedCNN(nn.Module):
-    def __init__(self):
-        super(advancedCNN, self).__init__()
+class CNN(nn.Module):
+    def __init__(self, input_channels=4):  # Bild + Maske = 2 Kanäle
+        super(CNN, self).__init__()
 
-        # Convolutional layers with dilation instead of stride
-        self.conv1 = nn.Conv2d(4, 32, kernel_size=3, padding=1, dilation=1)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=2, dilation=2)
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=4, dilation=4)
+        # CNN: Feature Extraction
+        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=5, stride=2, padding=2)  # -> 60x60
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)  # -> 30x30
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1)  # -> 15x15
+        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1)  # -> 8x8
+        self.conv5 = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1)  # -> 4x4
 
-        # Residual blocks for better gradient flow
-        self.res_block1 = nn.Sequential(
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.GroupNorm(32, 128),
-            nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.GroupNorm(32, 128)
-        )
+        self.fc1 = nn.Linear(512 * 4 * 4, 256)  # Flattened Features
+        self.fc2 = nn.Linear(256, 64)
 
-        self.res_block2 = nn.Sequential(
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.GroupNorm(32, 128),
-            nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.GroupNorm(32, 128)
-        )
-
-        # Downsampling with pooling
-        self.pool1 = nn.AdaptiveAvgPool2d((30, 30))
-        self.pool2 = nn.AdaptiveAvgPool2d((15, 15))
-
-        # Fully connected layers
-        self.fc1 = nn.Linear(128 * 15 * 15, 512)
-        self.fc2 = nn.Linear(512, 100)
-
-        # Outputs
-        self.fc_mu = nn.Linear(100, 2)  # Mean
-        self.fc_cov = nn.Linear(100, 3)  # Covariance matrix parameters
+        # Output-Schichten für Normalverteilung
+        self.mean_layer = nn.Linear(64, 2)  # µ_x, µ_y
+        self.log_var_layer = nn.Linear(64, 2)  # log(σ_x²), log(σ_y²)
+        self.corr_layer = nn.Linear(64, 1)  # tanh(ρ)
 
     def forward(self, x):
-        # Convolutional layers with ReLU activation
+        # CNN Feature Extraction
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
+        x = F.relu(self.conv5(x))
 
-        # Residual block 1
-        res = x
-        x = self.res_block1(x)
-        x += res
-        x = F.relu(x)
-
-        # Apply first pooling layer
-        x = self.pool1(x)
-
-        # Residual block 2
-        res = x
-        x = self.res_block2(x)
-        x += res
-        x = F.relu(x)
-
-        # Downsample to a fixed size
-        x = self.pool2(x)
-
-        # Flatten for fully connected layers
-        x = x.view(x.size(0), -1)
-
-        # Fully connected layers
+        x = x.view(x.size(0), -1)  # Flatten
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
 
-        # Mean output
-        mu = self.fc_mu(x)
+        # Output-Parameter der Normalverteilung
+        mean = self.mean_layer(x)
+        log_var = self.log_var_layer(x)  # Log-Varianz für Stabilität
+        corr = torch.tanh(self.corr_layer(x))  # Korrelation ρ in [-1,1]
 
-        # Covariance matrix parameters
-        cov_params = self.fc_cov(x)
+        # Rekonstruiere die Kovarianzmatrix
+        var_x = torch.exp(log_var[:, 0])  # σ_x² = exp(log(σ_x²))
+        var_y = torch.exp(log_var[:, 1])  # σ_y² = exp(log(σ_y²))
+        cov_xy = corr[:, 0] * torch.sqrt(var_x * var_y)  # ρσ_xσ_y
 
-        # Construct covariance matrix (positive semi-definite)
-        L = torch.zeros(mu.size(0), 2, 2).to(x.device)
-        L[:, 0, 0] = F.softplus(cov_params[:, 0])
-        L[:, 1, 0] = cov_params[:, 1]
-        L[:, 0, 1] = cov_params[:, 1]
-        L[:, 1, 1] = F.softplus(cov_params[:, 2])
+        sigma = torch.stack([var_x, cov_xy, cov_xy, var_y], dim=1).view(-1, 2, 2)
 
-        sigma = torch.bmm(L, L.transpose(1, 2))
-
-        return mu, sigma
+        return mean, sigma
 
 
-class CNN(nn.Module):
+class CNN_(nn.Module):
     """
     Convolutional Neural Network (pytorch model) to make a prediction on a vehicles position a certain time ahead.
     """
@@ -262,26 +222,16 @@ def nll_loss(y_true, mu, sigma):
     # Error term: (y_true - mu)
     error = (y_true - mu).unsqueeze(2)  # Shape (batch_size, 2, 1)
     
-    epsilon = 1e-4  
+    epsilon = 1e-6  
     sigma_stable = sigma + epsilon * torch.eye(sigma.size(-1)).to(sigma.device) 
-    
-    eigenvalues = torch.linalg.eigvalsh(sigma_stable)  # Nur reelle Eigenwerte
-    cond_number = torch.max(eigenvalues) / torch.min(eigenvalues + 1e-5)  # no zero-division
-    
-    #log_det = torch.logdet(sigma_stable)
-    sign, log_det = torch.linalg.slogdet(sigma_stable)
-    log_det = sign * log_det
-
-    #selected_channels = input[:, 2:4, :, :]
-    #non_zero_pixels = (selected_channels != 0).any(dim=1)  
-    #pixel_counts = non_zero_pixels.sum(dim=(1, 2))
 
     sigma_inv = torch.inverse(sigma_stable)
     mahalanobis = torch.bmm(torch.bmm(error.transpose(1, 2), sigma_inv), error)
+    trace_sigma = torch.einsum("bii->b", sigma_stable) 
+    mahalanobis_scaled = mahalanobis * (trace_sigma + epsilon)
     
     # NLL Loss: Mahalanobis-Distanz + log(det(sigma)) + Regularisierung
-    loss = mahalanobis.squeeze() + 0.01 * log_det + 0.0002 * cond_number 
-    #loss =  mahalanobis.squeeze() + 0.01 * log_det + 0.001 * cond_number
+    loss = mahalanobis_scaled.squeeze() 
 
     return loss.mean()
     

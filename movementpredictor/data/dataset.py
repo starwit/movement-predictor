@@ -17,77 +17,41 @@ from movementpredictor.data.trackedobjectposition import TrackedObjectPosition
 log = logging.getLogger(__name__)
 
 
-def get_path(num, path_store):
-    if num % 3 == 0:
-        path = path_store + "/train_cnn"
-    elif num % 3 == 1:
-        path = path_store + "/clustering"
+def getTorchDataSet(path_store, val_split_ratio=None):
+    parent_folder = os.path.dirname(path_store.rstrip(os.sep))
+    path_frame = os.path.join(parent_folder, "frame.pth")
+
+    if os.path.exists(path_frame):
+        frame = torch.load(path_frame)
     else:
-        path = path_store + "/test"
-    return path 
+        log.error(f"The file {path_frame} does not exist.")
 
+    pkl_files = [f for f in os.listdir(path_store) if f.endswith(".pkl")]
+    all_data = []
 
-def getTorchDataSet(path_store, folder:str, num_dataset:int):
-    path_frame = path_store + "/frame.pth"
+    for file in pkl_files:
+        file_path = os.path.join(path_store, file)
+        
+        with open(file_path, "rb") as f:
+            data = pickle.load(f)  
+            all_data.append(data)  
 
-    if folder == "train_cnn":
-        path = path_store + "/train_cnn/dataset" + str(num_dataset*3) + ".pkl"
-    elif folder == "clustering":
-        path = path_store + "/clustering/dataset" + str(1+num_dataset*3) + ".pkl"
-    elif folder == "test":
-        path = path_store + "/test/dataset" + str(2+num_dataset*3) + ".pkl"
-    else:
-        log.error("no such folder " + folder)
-
-    with open(path, "rb") as f:
-        raw_dataset = pickle.load(f)
-    #raw_dataset = torch.load(path)
-    frame = torch.load(path_frame)
-
+    raw_dataset = [item for data_list in all_data for item in data_list]
     torch_dataset = CNNData(frame, raw_dataset)
+
+    if val_split_ratio is not None:
+        torch.manual_seed(42)
+        total_size = len(torch_dataset)
+        val_size = int(total_size * val_split_ratio)
+        _, val_ds = random_split(torch_dataset, [total_size - val_size, val_size])
+        return val_ds
 
     return torch_dataset
 
 
-def merge_and_split_datasets(path_data, val_split_ratio=0.01):
-    merged_dataset = merge_datasets(path_data, "train_cnn")
-    
-    torch.manual_seed(42)
-    total_size = len(merged_dataset)
-    val_size = int(total_size * val_split_ratio)
-    train_size = total_size - val_size
-    
-    train_ds, val_ds = random_split(merged_dataset, [train_size, val_size])
-    
-    return train_ds, val_ds
-
-
-def merge_datasets(path_data, name="clustering"):
-    datasets = []
-    for part in range(4):
-        ds = getTorchDataSet(path_data, name, part)
-        datasets.append(ds)
-    
-    merged_dataset = ConcatDataset(datasets)
-    return merged_dataset
-
-
-def getTorchDataLoader(dataset, val_split=False, shuffle=True):
+def getTorchDataLoader(dataset, shuffle=True):
     batch_size = 8
-
-    if val_split:
-        torch.manual_seed(42)
-
-        val_size = int(len(dataset)*0.02)
-        train_size = len(dataset) - val_size
-        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
-
-        return train_loader, val_loader
-    
-    else:
-        return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=True)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=True)
 
 
 def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], path_frame: str) -> DataLoader:
@@ -119,12 +83,17 @@ def store_frame(frame: torch.Tensor, path_store1, path_store2):
 def store_data(tracks: dict, path_store, num_batch):
     dataset = make_input_target_pairs(tracks)
 
-    path = get_path(num_batch, path_store)
+    if num_batch % 3 == 0:
+        path = path_store + "/train_cnn"
+    elif num_batch % 3 == 1:
+        path = path_store + "/clustering"
+    else:
+        path = path_store + "/test"
+
     os.makedirs(path, exist_ok=True)
 
     with open(path + "/dataset" + str(num_batch) + ".pkl", "wb") as f:
         pickle.dump(dataset, f)
-    #torch.save(dataset, path + "/dataset" + str(num_batch) + ".pth")
 
 
 def make_input_target_pairs(tracks: dict) -> Dataset:
@@ -188,48 +157,47 @@ def plotDataSamples(dataloader: DataLoader, amount: int):
     for count, (sample_batch, target_batch, _, _) in enumerate(dataloader):
         if count >= amount: break
 
-        for i, (sample, target) in enumerate(zip(sample_batch, target_batch)):
-        #sample, target = sample_batch[0], target_batch[0]
+        sample, target = sample_batch[0], target_batch[0]
 
-            frame_np = sample[0].cpu().numpy()
-            mask_others_np = sample[1].cpu().numpy()
-            mask_interest_np_sin = sample[2].cpu().numpy()
-            mask_interest_np_cos = sample[3].cpu().numpy()
-            mask_interest_np = np.zeros(frame_np.shape)
-            mask_interest_np[(mask_interest_np_sin != 0) | (mask_interest_np_cos != 0)] = 1
-            
-            # calculate angle
-            sin = np.max(mask_interest_np_sin) if np.max(mask_interest_np_sin) > 0 else np.min(mask_interest_np_sin)
-            cos = np.max(mask_interest_np_cos) if np.max(mask_interest_np_cos) > 0 else np.min(mask_interest_np_cos)
-            angle_rad = math.atan2(sin, cos)
-            angle_deg = math.degrees(angle_rad)
-            if angle_deg < 0:
-                angle_deg += 360
-            angle_deg = round(angle_deg/2)
+        frame_np = sample[0].cpu().numpy()
+        mask_others_np = sample[1].cpu().numpy()
+        mask_interest_np_sin = sample[2].cpu().numpy()
+        mask_interest_np_cos = sample[3].cpu().numpy()
+        mask_interest_np = np.zeros(frame_np.shape)
+        mask_interest_np[(mask_interest_np_sin != 0) | (mask_interest_np_cos != 0)] = 1
+        
+        # calculate angle
+        sin = np.max(mask_interest_np_sin) if np.max(mask_interest_np_sin) > 0 else np.min(mask_interest_np_sin)
+        cos = np.max(mask_interest_np_cos) if np.max(mask_interest_np_cos) > 0 else np.min(mask_interest_np_cos)
+        angle_rad = math.atan2(sin, cos)
+        angle_deg = math.degrees(angle_rad)
+        if angle_deg < 0:
+            angle_deg += 360
+        angle_deg = round(angle_deg/2)
 
-            target = target.cpu().numpy()
+        target = target.cpu().numpy()
 
-            plt.figure(figsize=(12, 6))
+        plt.figure(figsize=(12, 6))
 
-            plt.subplot(1, 2, 1)
-            plt.title("input, orientation angle : " + str(angle_deg))
-            plt.imshow(frame_np, cmap='gray', interpolation='nearest')
-            plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
-            plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
-            plt.axis('off')
+        plt.subplot(1, 2, 1)
+        plt.title("input, orientation angle : " + str(angle_deg))
+        plt.imshow(frame_np, cmap='gray', interpolation='nearest')
+        plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
+        plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
+        plt.axis('off')
 
-            plt.subplot(1, 2, 2)
-            plt.title("target")
-            frame_np = (frame_np * 255).astype(np.uint8)
-            frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_GRAY2RGB)
-            cv2.circle(frame_rgb, [round(target[0]*frame_np.shape[-1]), round(target[1]*frame_np.shape[-2])], radius=2, color=(255, 0, 0), thickness=-1)
-            plt.imshow(frame_rgb)
-            plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
-            plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
-            plt.axis('off')
+        plt.subplot(1, 2, 2)
+        plt.title("target")
+        frame_np = (frame_np * 255).astype(np.uint8)
+        frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_GRAY2RGB)
+        cv2.circle(frame_rgb, [round(target[0]*frame_np.shape[-1]), round(target[1]*frame_np.shape[-2])], radius=2, color=(255, 0, 0), thickness=-1)
+        plt.imshow(frame_rgb)
+        plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
+        plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
+        plt.axis('off')
 
-            plt.savefig("plots/exampleInput" + str(count) + str(i) + ".png")
-            plt.close()
+        plt.savefig("plots/exampleInput" + str(count) + ".png")
+        plt.close()
 
 
 def create_mask_angle_tensors(dim_x, dim_y, bboxs, angle, scale=True):
