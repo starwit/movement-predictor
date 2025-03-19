@@ -35,7 +35,7 @@ def get_background_frame(path, dim_x, dim_y):
             start_message = next(messages)
             saedump.DumpMeta.model_validate_json(start_message)
 
-            for count, message in tqdm(enumerate(messages)):
+            for count, message in enumerate(messages):
                 event = saedump.Event.model_validate_json(message)
                 proto_bytes = pybase64.standard_b64decode(event.data_b64)
 
@@ -89,7 +89,7 @@ def getTrackedBaseData(path, num_batch) -> list[TrackedObjectPosition]:
 
                             track = TrackedObjectPosition()
                             track.set_capture_ts(proto.frame.timestamp_utc_ms)
-                            track.set_uuid(detection.object_id)
+                            track.set_uuid(detection.object_id.hex())
                             track.set_class_id(detection.class_id)
                             track.set_center((bbox.min_x + (bbox.max_x-bbox.min_x)/2, bbox.min_y + (bbox.max_y-bbox.min_y)/2))
                             track.set_bbox([[bbox.min_x, bbox.min_y], [bbox.max_x, bbox.max_y]])
