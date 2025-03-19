@@ -41,7 +41,7 @@ class TrackCollector:
 
             tracked_object_pos = TrackedObjectPosition()
             tracked_object_pos.set_capture_ts(frame.timestamp_utc_ms)
-            tracked_object_pos.set_uuid(det.object_id)
+            tracked_object_pos.set_uuid(str(det.object_id.hex()))
             tracked_object_pos.set_class_id(det.class_id)
             tracked_object_pos.set_center(center)
             tracked_object_pos.set_bbox([[min_x, min_y], [max_x, max_y]])

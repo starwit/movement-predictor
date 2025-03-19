@@ -11,3 +11,4 @@ settings.yaml
 anomalies/*
 deployment/helm/local.env.sh
 deployment/helm/customvalues.yaml
+model/

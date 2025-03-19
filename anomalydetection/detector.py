@@ -84,7 +84,7 @@ class Detector():
             anomaly_ids = [anomaly.obj_id for anomaly in anomalies]
 
             for id in anomaly_ids:
-                anomaly_trajectories[id] = tracks[ast.literal_eval(id)]
+                anomaly_trajectories[id] = tracks[id]
 
             for id in anomaly_trajectories.keys():
                 trajectory = anomaly_msg.trajectories.add() 
@@ -100,7 +100,7 @@ class Detector():
 
     def _map_anomaly(self, total_anomalies: List[InferenceResult], anomaly_trajectory) -> Trajectory:
         trajectory = Trajectory()
-        trajectory.object_id = anomaly_trajectory[0].get_uuid()
+        trajectory.object_id = bytes.fromhex(anomaly_trajectory[0].get_uuid())
         trajectory.class_id = anomaly_trajectory[0].get_class_id()
 
         anomaly_trigger_ts = [a.timestamp for a in total_anomalies if a.obj_id == trajectory.object_id]

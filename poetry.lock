@@ -557,7 +557,7 @@ dev = ["meson-python (>=0.13.1,<0.17.0)", "pybind11 (>=2.13.2,!=2.13.3)", "setup
 
 [[package]]
 name = "movementpredictor"
-version = "0.1.3"
+version = "0.1.4"
 description = "position forecaster to find unlikely movements for movement clustering"
 optional = false
 python-versions = "^3.10"
@@ -585,8 +585,8 @@ visionlib = {git = "https://github.com/starwit/vision-lib.git", tag = "0.11.2", 
 [package.source]
 type = "git"
 url = "https://github.com/starwit/movement-predictor.git"
-reference = "0.1.3"
-resolved_reference = "58e437a558baf5a74222ec0e674bf54f1d0f82cc"
+reference = "0.1.4"
+resolved_reference = "1018ef2154ffd0883ad0ee3ee903ae401fc17bc3"
 
 [[package]]
 name = "mpmath"
@@ -1953,4 +1953,4 @@ subdirectory = "python"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "0cacea5bb5b73506bcb66baf78f4b7ccf1dd6058e101b3dc5b28cdc0e6c2bad2"
+content-hash = "5ccf834fafb4d628d77333bd9a69fc0574255927263af5b426e60b5df17380a6"
