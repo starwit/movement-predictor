@@ -12,3 +12,4 @@ anomalies/*
 deployment/helm/local.env.sh
 deployment/helm/customvalues.yaml
 model/
+*.mp4
