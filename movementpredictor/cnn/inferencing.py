@@ -36,24 +36,28 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
     samples_with_stats = []
 
     with torch.no_grad():
-        for i, (x, target, ts, id) in tqdm(enumerate(dataloader)):
-            if i == 10000:
-                break
-            x = x.clone().detach().to(device)
+        for i, (x, target, ts, id) in tqdm(enumerate(dataloader), desc="inferencing movement predictor CNN"):
+            #if i == 5000:
+             #   break
+            
+            x = x.to(device)
 
             mu_batch, cov_batch = model(x)
-            mu_batch, cov_batch = mu_batch.detach().cpu().numpy(), cov_batch.detach().cpu().numpy()
-            target = target.detach().cpu().numpy()
+            mu_batch, cov_batch = mu_batch.cpu(), cov_batch.cpu()
+            target = target.cpu()
 
-            for inp, mu, cov, pos, timestamp, obj_id in zip(x, mu_batch, cov_batch, target, ts, id):
-                #cov = regularize_cov(cov)
+            eye = torch.eye(cov_batch.shape[-1], device=cov_batch.device).expand_as(cov_batch)
+            sigma_stable = cov_batch + 1e-6 * eye
 
-                sigma_stable = cov + 1e-6 * np.eye(cov.shape[0])
-                sigma_inv = np.linalg.inv(sigma_stable)
-                diff = (pos - mu).reshape(-1, 1) 
-                dist = np.matmul(np.matmul(diff.T, sigma_inv), diff).squeeze()
-                dist = np.sqrt(dist)
+            sigma_inv = torch.inverse(sigma_stable)
 
+            # Compute Mahalanobis distance for the entire batch
+            diff = (target - mu_batch).unsqueeze(-1)  # Shape: (batch, 2, 1)
+            mahalanobis = torch.sqrt(torch.bmm(torch.bmm(diff.transpose(1, 2), sigma_inv), diff).squeeze())
+
+            mu_batch, cov_batch, mahalanobis, target = mu_batch.numpy(), cov_batch.numpy(), mahalanobis.numpy(), target.numpy()
+
+            for inp, mu, cov, pos, timestamp, obj_id, dist in zip(x, mu_batch, cov_batch, target, ts, id, mahalanobis):
                 stats = InferenceResult(
                     input=get_bounding_box_info(inp),
                     target=pos.tolist(),
@@ -62,10 +66,11 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
                     obj_id=obj_id
                 )
                 samples_with_stats.append(stats)
-
+        
     return samples_with_stats
 
 
+'''
 def regularize_cov(cov, max_cond=8, min_achsis=0.01):
     #eigenvalues, eigenvectors = np.linalg.eigh(cov)
     #eigenvalues = np.maximum(eigenvalues, min_achsis)
@@ -79,7 +84,8 @@ def regularize_cov(cov, max_cond=8, min_achsis=0.01):
         eigvals = np.maximum(eigvals, eigvals.max() / max_cond)  
         cov = eigvecs @ np.diag(eigvals) @ eigvecs.T  
 
-    return cov
+    return cov'
+'''
 
 
 def get_bounding_box_info(input):

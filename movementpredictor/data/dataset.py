@@ -54,7 +54,7 @@ def getTorchDataLoader(dataset, shuffle=True):
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=True)
 
 
-def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], path_frame: str) -> DataLoader:
+def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], path_frame: str, frame_rate) -> DataLoader:
     """
     Creates a pytorch DataLoader for make the data progressible for pytorch deep learning models.
     Based on a background_frame and the tracking information the model's input (frame containing boundingboxes) 
@@ -63,12 +63,13 @@ def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], path_fra
     Args:
         tracks: dict with trajectories (key: object id, value: list of this object's tracks)
         path_frame: path to the stored background frame that is the background information of all models inputs
+        frame_rate: frame rate of video data
     
     Retruns: 
         DataLoader: pytorch Dataloader to make easy use of the dataset in batches
 
     """
-    raw_dataset = make_input_target_pairs(tracks)
+    raw_dataset = make_input_target_pairs(tracks, frame_rate)
     frame = torch.load(path_frame)
     torch_dataset = CNNData(frame, raw_dataset)
     torch_dataloader = getTorchDataLoader(torch_dataset, shuffle=False)
@@ -80,8 +81,15 @@ def store_frame(frame: torch.Tensor, path_store1, path_store2):
     torch.save(frame, path_store2 + "/frame.pth")
 
 
-def store_data(tracks: dict, path_store, num_batch):
-    dataset = make_input_target_pairs(tracks)
+def store_data(tracks: dict, path_store, frame_rate, num_batch=None):
+    dataset = make_input_target_pairs(tracks, frame_rate)
+
+    if num_batch is None:
+        path = os.path.join(path_store, "test")
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, "dataset.pkl"), "wb") as f:
+            pickle.dump(dataset, f)
+        return
 
     if num_batch % 3 == 0:
         path = path_store + "/train_cnn"
@@ -89,14 +97,14 @@ def store_data(tracks: dict, path_store, num_batch):
         path = path_store + "/clustering"
     else:
         path = path_store + "/test"
-
+    
     os.makedirs(path, exist_ok=True)
 
     with open(path + "/dataset" + str(num_batch) + ".pkl", "wb") as f:
         pickle.dump(dataset, f)
 
 
-def make_input_target_pairs(tracks: dict) -> Dataset:
+def make_input_target_pairs(tracks: dict, frame_rate: float) -> Dataset:
     time_interval_in_millisec = 1100
     prediction_step = 1000
     input_target_pairs = []
@@ -104,19 +112,20 @@ def make_input_target_pairs(tracks: dict) -> Dataset:
     for trajectory in tqdm(tracks.values(), desc="creating dataset - calculating target positions"):
         if len(trajectory) == 0:
             continue
+        
+        cars = [input_tr.get_class_id() == 2 for input_tr in trajectory]
+        if sum(cars) / len(cars) > 0.8:      # only examine vehicles that are at least 80% classified as a car -> high probability of actually being a car
+            for i, input_tr in enumerate(trajectory):
+                timecur = input_tr.get_capture_ts()
+                ts = []
 
-        for i, input_tr in enumerate(trajectory):
-            if input_tr.get_class_id() != 2:
-                continue
-            timecur = input_tr.get_capture_ts()
-            ts = []
-
-            for next_tr in trajectory[i:]:
-                ts.append(next_tr)
-                if next_tr.get_capture_ts() - timecur > time_interval_in_millisec:
-                    if len(ts) >= 4 and next_tr.get_capture_ts() - ts[-2].get_capture_ts() < 500:
-                        input_target_pairs.append([input_tr, get_position_after_time(ts, prediction_step)])
-                    break
+                for next_tr in trajectory[i:]:
+                    ts.append(next_tr)
+                    if next_tr.get_capture_ts() - timecur > time_interval_in_millisec:
+                        # make sure the object is detected in at least 80% of the frames 
+                        if len(ts) >= 0.8*(time_interval_in_millisec/1000)*frame_rate: #and next_tr.get_capture_ts() - ts[-2].get_capture_ts() < 500:
+                            input_target_pairs.append([input_tr, get_position_after_time(ts, prediction_step)])
+                        break
     
     timestamp_dict = defaultdict(list)
     for _, trajectory in tracks.items():
@@ -126,15 +135,17 @@ def make_input_target_pairs(tracks: dict) -> Dataset:
     for i, (inp, tar) in tqdm(enumerate(input_target_pairs), desc="creating dataset - collecting all bboxs"):
         other_vehicles = timestamp_dict[inp.get_capture_ts()]
         bboxs = [vehicle.get_bbox() for vehicle in other_vehicles]
+        angles = [vehicle.get_movement_angle() for vehicle in other_vehicles]
 
-        bboxs_tensor = np.array(bboxs, dtype=np.float32)
-        input_tensor = np.array(inp.get_bbox(), dtype=np.float32)
-        target_tensor = np.array(tar, dtype=np.float32)
+        bboxs_other = np.array(bboxs, dtype=np.float32)
+        angles_other = np.array(angles, dtype=np.float32)
+        input_bbox = np.array(inp.get_bbox(), dtype=np.float32)
+        target_pos = np.array(tar, dtype=np.float32)
         frame_ts = np.str_(inp.get_capture_ts())
         obj_id = np.str_(inp.get_uuid())
         angle = np.float32(inp.get_movement_angle())
 
-        input_target_pairs[i] = [bboxs_tensor, input_tensor, target_tensor, frame_ts, obj_id, angle]
+        input_target_pairs[i] = [bboxs_other, angles_other, input_bbox, target_pos, frame_ts, obj_id, angle]
     
     return input_target_pairs
 
@@ -160,9 +171,14 @@ def plotDataSamples(dataloader: DataLoader, amount: int):
         sample, target = sample_batch[0], target_batch[0]
 
         frame_np = sample[0].cpu().numpy()
-        mask_others_np = sample[1].cpu().numpy()
-        mask_interest_np_sin = sample[2].cpu().numpy()
-        mask_interest_np_cos = sample[3].cpu().numpy()
+
+        mask_others_np_sin = sample[1].cpu().numpy()
+        mask_others_np_cos = sample[2].cpu().numpy()
+        mask_others_np = np.zeros(frame_np.shape)
+        mask_others_np[(mask_others_np_sin != 0) | (mask_others_np_cos != 0)] = 1
+
+        mask_interest_np_sin = sample[3].cpu().numpy()
+        mask_interest_np_cos = sample[4].cpu().numpy()
         mask_interest_np = np.zeros(frame_np.shape)
         mask_interest_np[(mask_interest_np_sin != 0) | (mask_interest_np_cos != 0)] = 1
         
@@ -200,19 +216,33 @@ def plotDataSamples(dataloader: DataLoader, amount: int):
         plt.close()
 
 
-def create_mask_angle_tensors(dim_x, dim_y, bboxs, angle, scale=True):
-    tensor = torch.zeros((2, dim_x, dim_y))
-    
-    for bbox in bboxs:
-        [x_min, y_min], [x_max, y_max] = bbox
+def bbox_mask(dim_x, dim_y, bbox, scale):
+    [x_min, y_min], [x_max, y_max] = bbox
 
-        if scale:
-            x_min_idx = int(x_min * dim_x)
-            x_max_idx = int(x_max * dim_x)
-            y_min_idx = int(y_min * dim_y)
-            y_max_idx = int(y_max * dim_y)
-        else:
-            x_min_idx, x_max_idx, y_min_idx, y_max_idx = x_min, x_max, y_min, y_max
+    if scale:
+        x_min_idx = int(x_min * dim_x)
+        x_max_idx = int(x_max * dim_x)
+        y_min_idx = int(y_min * dim_y)
+        y_max_idx = int(y_max * dim_y)
+    else:
+        x_min_idx, x_max_idx, y_min_idx, y_max_idx = x_min, x_max, y_min, y_max
+    
+    #if x_max_idx - x_min_idx < 2:
+     #   x_max_idx = x_max_idx + 1
+      #  x_min_idx = x_max_idx - 2
+    
+    #if y_max_idx - y_min_idx < 2:
+     #   y_max_idx = y_max_idx + 1
+      #  y_min_idx = y_max_idx - 2
+
+    return x_min_idx, x_max_idx, y_min_idx, y_max_idx
+
+
+def create_mask_angle_tensor_(dim_x, dim_y, bboxs, angles, scale=True):
+    tensor = torch.zeros((2, dim_x, dim_y))
+
+    for bbox, angle in zip(bboxs, angles):
+        x_min_idx, x_max_idx, y_min_idx, y_max_idx = bbox_mask(dim_x, dim_y, bbox, scale)
 
         angle_without_direction = angle % 180
         angle_rad = math.radians(angle_without_direction*2)
@@ -223,20 +253,25 @@ def create_mask_angle_tensors(dim_x, dim_y, bboxs, angle, scale=True):
     return tensor.permute(0, 2, 1)
 
 
+def create_mask_angle_tensor(dim_x, dim_y, bbox, angle, scale=True):
+    tensor = torch.zeros((2, dim_x, dim_y))
+
+    x_min_idx, x_max_idx, y_min_idx, y_max_idx = bbox_mask(dim_x, dim_y, bbox, scale)
+
+    angle_without_direction = angle % 180
+    angle_rad = math.radians(angle_without_direction*2)
+
+    tensor[0, x_min_idx:x_max_idx, y_min_idx:y_max_idx] = math.sin(angle_rad)
+    tensor[1, x_min_idx:x_max_idx, y_min_idx:y_max_idx] = math.cos(angle_rad)
+
+    return tensor.permute(0, 2, 1)
+
+
 def create_mask_tensor(dim_x, dim_y, bboxs, scale=True):
     tensor = torch.zeros((dim_x, dim_y))
     
     for bbox in bboxs:
-        [x_min, y_min], [x_max, y_max] = bbox
-
-        if scale:
-            x_min_idx = int(x_min * dim_x)
-            x_max_idx = int(x_max * dim_x)
-            y_min_idx = int(y_min * dim_y)
-            y_max_idx = int(y_max * dim_y)
-        else:
-            x_min_idx, x_max_idx, y_min_idx, y_max_idx = x_min, x_max, y_min, y_max
-
+        x_min_idx, x_max_idx, y_min_idx, y_max_idx = bbox_mask(dim_x, dim_y, bbox, scale)
         tensor[x_min_idx:x_max_idx, y_min_idx:y_max_idx] = 1
 
     return tensor.T
@@ -253,28 +288,33 @@ class CNNData(Dataset):
 
     def __init__(self, frame, inp_tar_list):
         self.frame = frame
-        self.other_vehicles = [item[0] for item in inp_tar_list]
-        self.objects_of_interest = [item[1] for item in inp_tar_list]
-        self.targets = [item[2] for item in inp_tar_list]
-        self.frame_timestamps = [item[3] for item in inp_tar_list]
-        self.ids = [item[4] for item in inp_tar_list]
-        self.angles = [item[5] for item in inp_tar_list]
+        self.other_vehicles_bboxs = [item[0] for item in inp_tar_list]
+        self.other_vehicles_angles = [item[1] for item in inp_tar_list]
+        self.objects_of_interest = [item[2] for item in inp_tar_list]
+        self.targets = [item[3] for item in inp_tar_list]
+        self.frame_timestamps = [item[4] for item in inp_tar_list]
+        self.ids = [item[5] for item in inp_tar_list]
+        self.angles = [item[6] for item in inp_tar_list]
 
     def __len__(self):
         return len(self.objects_of_interest)
 
     def __getitem__(self, idx):
 
-        inp_track = self.objects_of_interest[idx]
-        other_bboxs = self.other_vehicles[idx]
+        inp_bbox = self.objects_of_interest[idx]
+        other_bboxs = self.other_vehicles_bboxs[idx]
+        other_angles = self.other_vehicles_angles[idx]
         tar_pos = self.targets[idx]
         frame_ts = self.frame_timestamps[idx]
         obj_id = self.ids[idx]
+        angle = self.angles[idx]
 
         #frame_tensor = self.frames[inp_track.get_capture_ts()].unsqueeze(0)
         shape = (self.frame.shape[-1], self.frame.shape[-2])
-        mask_tensor_others = create_mask_tensor(shape[0], shape[1], other_bboxs).unsqueeze(0)
-        mask_tensors_interest = create_mask_angle_tensors(shape[0], shape[1], [inp_track], angle=self.angles[idx])
+        #mask_tensor_others = create_mask_tensor(shape[0], shape[1], other_bboxs).unsqueeze(0)
+        #mask_tensors_interest = create_mask_angle_tensor(shape[0], shape[1], inp_track, angle=self.angles[idx])
+        mask_tensor_others = create_mask_angle_tensor_(shape[0], shape[1], other_bboxs, angles=other_angles)
+        mask_tensors_interest = create_mask_angle_tensor_(shape[0], shape[1], [inp_bbox], angles=[angle])
         sample = torch.cat((self.frame.unsqueeze(0), mask_tensor_others, mask_tensors_interest), dim=0).to(torch.float32)
         
         #target = create_target_tensor(shape[0], shape[1], tar_pos)
