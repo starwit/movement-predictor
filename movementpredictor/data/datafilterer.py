@@ -12,7 +12,7 @@ class DataFilterer():
     log = logging.getLogger(__name__)
     min_movement = 0.05
     min_length = 7
-    time_window_movement = 10000
+    time_window_movement = 10000        # 10s
 
     def apply_filtering(self, tracking_list: list[TrackedObjectPosition]) -> Dict[str, list[TrackedObjectPosition]]:
         """
@@ -54,7 +54,9 @@ class DataFilterer():
                 continue
 
             bboxes = [track.get_bbox() for track in tracks_of_object]
+            #timestamps = [track.get_capture_ts() for track in tracks_of_object]
             smooth_bboxes, smooth_centers = DataFilterer._smooth_trajectory_median(bboxes)#, timestamps)
+            #smooth_bboxes, smooth_centers = DataFilterer._smooth_trajectory_median_(bboxes, timestamps)
 
             for track, bbox, center in zip(tracks_of_object, smooth_bboxes, smooth_centers):
                 track.set_bbox(bbox)
@@ -115,9 +117,8 @@ class DataFilterer():
     
 
     @staticmethod
-    def _smooth_trajectory_median(bboxes, kernel_size=3):
+    def _smooth_trajectory_median(bboxes, kernel_size=7):
         bboxes = np.array(bboxes)
-    
         # Eckpunkte extrahieren
         x_min = bboxes[:, 0, 0]
         y_min = bboxes[:, 0, 1]
@@ -130,6 +131,76 @@ class DataFilterer():
         x_max_smooth = medfilt(x_max, kernel_size)
         y_max_smooth = medfilt(y_max, kernel_size)
 
+        x_min[kernel_size//2:-kernel_size//2] = x_min_smooth[kernel_size//2:-kernel_size//2]
+        x_max[kernel_size//2:-kernel_size//2] = x_max_smooth[kernel_size//2:-kernel_size//2]
+        y_min[kernel_size//2:-kernel_size//2] = y_min_smooth[kernel_size//2:-kernel_size//2]
+        y_max[kernel_size//2:-kernel_size//2] = y_max_smooth[kernel_size//2:-kernel_size//2]
+
+        # Neue Bounding Boxes zusammensetzen
+        smoothed_bboxes = np.stack([
+            np.stack([x_min, y_min], axis=1),
+            np.stack([x_max, y_max], axis=1)
+        ], axis=1)
+
+        cx_smooth = (x_min + x_max) / 2
+        cy_smooth = (y_min + y_max) / 2
+        smoothed_centers = np.stack([cx_smooth, cy_smooth], axis=1)
+
+        return smoothed_bboxes, smoothed_centers
+    
+    '''
+    def _smooth_trajectory_median_(bboxes, timestamps, kernel_size=5, speed_threshold=5.0, angle_threshold=60.0):
+        bboxes = np.array(bboxes)
+        timestamps = np.array(timestamps)
+
+        x_min, y_min = bboxes[:, 0, 0], bboxes[:, 0, 1]
+        x_max, y_max = bboxes[:, 1, 0], bboxes[:, 1, 1]
+
+        cx = (x_min + x_max) / 2
+        cy = (y_min + y_max) / 2
+
+        dt = np.diff(timestamps)
+        dt[dt == 0] = np.nan
+
+        distances = np.sqrt(np.diff(cx)**2 + np.diff(cy)**2)
+        speeds = distances / dt 
+
+        directions = np.arctan2(np.diff(cy), np.diff(cx)) * (180 / np.pi)  
+        angle_changes = np.abs(np.diff(directions))  
+
+        bad_indices = np.where(
+            (speeds[1:] > speed_threshold * speeds[:-1]) | 
+            (speeds[1:] < speeds[:-1] / speed_threshold) |
+            (angle_changes > angle_threshold)
+        )[0] + 1  # +1, weil diff() die Länge um 1 reduziert
+
+        x_min[bad_indices] = np.nan
+        y_min[bad_indices] = np.nan
+        x_max[bad_indices] = np.nan
+        y_max[bad_indices] = np.nan
+
+        x_min_smooth = medfilt(np.nan_to_num(x_min, nan=np.nanmedian(x_min)), kernel_size)
+        y_min_smooth = medfilt(np.nan_to_num(y_min, nan=np.nanmedian(y_min)), kernel_size)
+        x_max_smooth = medfilt(np.nan_to_num(x_max, nan=np.nanmedian(x_max)), kernel_size)
+        y_max_smooth = medfilt(np.nan_to_num(y_max, nan=np.nanmedian(y_max)), kernel_size)
+
+        # Fehlende Werte mit Interpolation auffüllen
+        def interpolate_nans(data):
+            """Interpolate missing values (NaNs) using linear interpolation."""
+            nans = np.isnan(data)
+            if np.any(nans):
+                interp_func = interp1d(
+                    np.where(~nans)[0], data[~nans], 
+                    kind="linear", bounds_error=False, fill_value="extrapolate"
+                )
+                data[nans] = interp_func(np.where(nans)[0])
+            return data
+
+        x_min_smooth = interpolate_nans(x_min_smooth)
+        y_min_smooth = interpolate_nans(y_min_smooth)
+        x_max_smooth = interpolate_nans(x_max_smooth)
+        y_max_smooth = interpolate_nans(y_max_smooth)
+
         # Neue Bounding Boxes zusammensetzen
         smoothed_bboxes = np.stack([
             np.stack([x_min_smooth, y_min_smooth], axis=1),
@@ -141,7 +212,7 @@ class DataFilterer():
         smoothed_centers = np.stack([cx_smooth, cy_smooth], axis=1)
 
         return smoothed_bboxes, smoothed_centers
-    
+    '''
 
     @staticmethod
     def _calculate_movement_angle(tracks_of_object: list[TrackedObjectPosition]):

@@ -1,4 +1,5 @@
 from .data.trackedobjectposition import TrackedObjectPosition
+from .data.datamanagement import TrackingDataManager
 from .data.datafilterer import DataFilterer
 from .data.dataset import makeTorchDataLoader
 from .cnn.probabilistic_regression import CNN
@@ -7,4 +8,4 @@ from .anomalydetection.anomaly_detector import get_meaningful_unlikely_samples
 
 
 __all__ = ["TrackedObjectPosition", "DataFilterer", "makeTorchDataLoader", "CNN", "inference_with_stats", 
-           "InferenceResult", "PredictionStats", "get_meaningful_unlikely_samples"]
+           "InferenceResult", "PredictionStats", "get_meaningful_unlikely_samples", "TrackingDataManager"]

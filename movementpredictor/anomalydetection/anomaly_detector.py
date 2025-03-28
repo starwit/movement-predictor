@@ -24,11 +24,15 @@ log = logging.getLogger(__name__)
 
 def plot_input_target_output(x, y, mu, sigma):
     frame_np = x[0].cpu().numpy()
-    mask_others_np = x[1].cpu().numpy()
-    mask_interest_np_sin = x[2].cpu().numpy()
-    mask_interest_np_cos = x[3].cpu().numpy()
     target = y.cpu().numpy()
 
+    mask_others_np_sin = x[1].cpu().numpy()
+    mask_others_np_cos = x[2].cpu().numpy()
+    mask_others_np = np.zeros(frame_np.shape)
+    mask_others_np[(mask_others_np_sin != 0) | (mask_others_np_cos != 0)] = 1
+
+    mask_interest_np_sin = x[3].cpu().numpy()
+    mask_interest_np_cos = x[4].cpu().numpy()
     mask_interest_np = np.zeros(frame_np.shape)
     mask_interest_np[(mask_interest_np_sin != 0) | (mask_interest_np_cos != 0)] = 1
         
@@ -177,8 +181,6 @@ def plot_unlikely_samples(test, threshold_dist, samples_with_stats: List[inferen
 
     os.makedirs("plots/anomalies", exist_ok=True)
     for i, (x, target, _, _) in tqdm(enumerate(test)):
-        if i == 10000:
-                break
         for mu, cov, inp, pos, dist in zip(mus[i], covs[i], x, target, dists[i]):
             if dist > threshold_dist:
                 count += 1

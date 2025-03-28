@@ -111,7 +111,7 @@ def store_parameters(history, config: ModelConfig):
 
 
 class CNN(nn.Module):
-    def __init__(self, input_channels=4):  # Bild + Maske = 2 Kanäle
+    def __init__(self, input_channels=5):  # frame + 2 masks others + 2 masks car
         super(CNN, self).__init__()
 
         # CNN: Feature Extraction
@@ -124,7 +124,7 @@ class CNN(nn.Module):
         self.fc1 = nn.Linear(512 * 4 * 4, 256)  # Flattened Features
         self.fc2 = nn.Linear(256, 64)
 
-        # Output-Schichten für Normalverteilung
+        # output
         self.mean_layer = nn.Linear(64, 2)  # µ_x, µ_y
         self.log_var_layer = nn.Linear(64, 2)  # log(σ_x²), log(σ_y²)
         self.corr_layer = nn.Linear(64, 1)  # tanh(ρ)
@@ -156,7 +156,7 @@ class CNN(nn.Module):
         return mean, sigma
 
 
-class CNN_(nn.Module):
+class CNN_old(nn.Module):
     """
     Convolutional Neural Network (pytorch model) to make a prediction on a vehicles position a certain time ahead.
     """
