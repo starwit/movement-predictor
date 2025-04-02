@@ -10,7 +10,7 @@ import pybase64
 
 from movementpredictor.data.datamanagement import get_downsampled_tensor_img
 from movementpredictor.data.dataset import create_mask_tensor
-from movementpredictor.anomalydetection.anomaly_detector import make_plot
+from movementpredictor.anomalydetection.visualizer import make_plot
 
 from visionapi.sae_pb2 import SaeMessage
 from visionlib import saedump

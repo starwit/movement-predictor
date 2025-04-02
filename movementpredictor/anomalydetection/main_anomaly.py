@@ -2,7 +2,7 @@ import os
 import sys
 sys.path.append('/home/starwit01/workspaces/hanna/movement-predictor')
 
-from movementpredictor.cnn import probabilistic_regression
+from movementpredictor.cnn import model_architectures
 from movementpredictor.config import ModelConfig
 from movementpredictor.cnn.inferencing import inference_with_stats
 from movementpredictor.anomalydetection import clusterer
@@ -20,12 +20,16 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     weights = torch.load(config.path_model + "/model_weights.pth", map_location=device) 
 
-    model = probabilistic_regression.CNN()
+    ModelClass = getattr(model_architectures, config.name_model, None)
+    if ModelClass is None:
+        log.error(f"{config.name_model} is not a known model architecture.")
+
+    model = ModelClass()
     model.load_state_dict(weights, strict=True)
     model.to(device)
     model.eval()
 
-    ds = dataset.getTorchDataSet(os.path.join(config.path_store_data, "test"))
+    ds = dataset.getTorchDataSet(os.path.join(config.path_store_data, "clustering"))
     test = dataset.getTorchDataLoader(ds, shuffle=False)
 
     anomaly_detector.visualValidation(model, test, num_plots=100)

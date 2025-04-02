@@ -15,93 +15,12 @@ from movementpredictor.data.datamanagement import get_downsampled_tensor_img
 from movementpredictor.data.dataset import create_mask_tensor
 from movementpredictor.anomalydetection.video_generation import store_video
 from movementpredictor.cnn import inferencing
+from movementpredictor.anomalydetection import visualizer
 
 from visionapi.sae_pb2 import SaeMessage
 from visionlib import saedump
 
 log = logging.getLogger(__name__)
-
-
-def plot_input_target_output(x, y, mu, sigma):
-    frame_np = x[0].cpu().numpy()
-    target = y.cpu().numpy()
-
-    mask_others_np_sin = x[1].cpu().numpy()
-    mask_others_np_cos = x[2].cpu().numpy()
-    mask_others_np = np.zeros(frame_np.shape)
-    mask_others_np[(mask_others_np_sin != 0) | (mask_others_np_cos != 0)] = 1
-
-    mask_interest_np_sin = x[3].cpu().numpy()
-    mask_interest_np_cos = x[4].cpu().numpy()
-    mask_interest_np = np.zeros(frame_np.shape)
-    mask_interest_np[(mask_interest_np_sin != 0) | (mask_interest_np_cos != 0)] = 1
-        
-    # calculate angle
-    sin = np.max(mask_interest_np_sin) if np.max(mask_interest_np_sin) > 0 else np.min(mask_interest_np_sin)
-    cos = np.max(mask_interest_np_cos) if np.max(mask_interest_np_cos) > 0 else np.min(mask_interest_np_cos)
-    angle_rad = math.atan2(sin, cos)
-    angle_deg = math.degrees(angle_rad)
-    if angle_deg < 0:
-        angle_deg += 360
-    angle_deg = round(angle_deg/2)
-
-    make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np, angle=angle_deg)
-
-
-def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None, angle=None, dist=None):
-    plt.figure(figsize=(22, 7))
-
-    plt.subplot(1, 3, 1)
-    plt.title("input") if angle is None else plt.title("input, orientation angle: " + str(angle))
-    plt.imshow(frame_np, cmap='gray', interpolation='nearest')
-    if mask_others_np is not None:
-        plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
-    plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
-    plt.axis('off')
-
-    plt.subplot(1, 3, 2)
-    plt.title("target")
-    frame_np = (frame_np * 255).astype(np.uint8)
-    frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_GRAY2RGB)
-    cv2.circle(frame_rgb, [round(target[0]*frame_np.shape[-1]), round(target[1]*frame_np.shape[-2])], radius=2, color=(255, 0, 0), thickness=-1)
-    plt.imshow(frame_rgb)
-    if mask_others_np is not None:
-        plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
-    plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
-    plt.axis('off')
-
-    plt.subplot(1, 3, 3)
-    plt.title("prediction") if dist is None else plt.title("prediction, distance=" + str(dist))
-    frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_GRAY2RGB)
-    circle = [round(mu[0]*frame_np.shape[-1]), round(mu[1]*frame_np.shape[-2])]
-    cv2.circle(frame_rgb, circle, radius=2, color=(255, 0, 0), thickness=-1)
-
-    #sigma = inferencing.regularize_cov(sigma)
-    eigenvalues, eigenvectors = np.linalg.eigh(sigma*frame_np.shape[-1]*0.1)  # add factor for better visualization
-    order = eigenvalues.argsort()[::-1]
-    eigenvalues = eigenvalues[order]
-    eigenvectors = eigenvectors[:, order]
-
-    major_axis_length = 2 * np.sqrt(eigenvalues[0])  
-    minor_axis_length = 2 * np.sqrt(eigenvalues[1]) 
-    angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0])) 
-    
-    cv2.ellipse(
-        frame_rgb,
-        center=circle,
-        axes=(int(major_axis_length), int(minor_axis_length)),
-        angle=angle,
-        startAngle=0,
-        endAngle=360,
-        color=(255, 0, 0),
-        thickness=1
-    )
-
-    plt.imshow(frame_rgb)
-    if mask_others_np is not None:
-        plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
-    plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
-    plt.axis('off')
 
 
 def visualValidation(model, dataloader, num_plots=100) -> None:
@@ -111,9 +30,9 @@ def visualValidation(model, dataloader, num_plots=100) -> None:
         for count, (x, target, _, _) in enumerate(dataloader):
             if count >= num_plots: break
             model_data = torch.tensor(x).to(device)
-            mu, sigma = model(model_data)
+            mu, sigma, skew = model(model_data)
 
-            plot_input_target_output(x[0], target[0], mu[0].detach().cpu().numpy(), sigma[0].detach().cpu().numpy())
+            visualizer.plot_input_target_output(x[0], target[0], mu[0].detach().cpu().numpy(), sigma[0].detach().cpu().numpy(), skew[0].detach().cpu().numpy())
             plt.savefig("plots/outputAE" + str(count) + ".png")
             plt.close()
 
@@ -179,18 +98,26 @@ def plot_unlikely_samples(test, threshold_dist, samples_with_stats: List[inferen
     mus = [mus[i:i + batch_size] for i in range(0, len(mus), batch_size)]
     covs = [covs[i:i + batch_size] for i in range(0, len(covs), batch_size)]
 
+    if samples_with_stats[0].prediction.lambda_skew is not None:
+        skews = [np.array(sample.prediction.lambda_skew) for sample in samples_with_stats]
+        skews = [skews[i:i + batch_size] for i in range(0, len(skews), batch_size)]
+    else:
+        skews = [[None] * batch_size for _ in range(len(mus))]
+
     os.makedirs("plots/anomalies", exist_ok=True)
     for i, (x, target, _, _) in tqdm(enumerate(test)):
-        for mu, cov, inp, pos, dist in zip(mus[i], covs[i], x, target, dists[i]):
+        #if i == 1000:
+         #   break
+        for mu, cov, skew, inp, pos, dist in zip(mus[i], covs[i], skews[i], x, target, dists[i]):
             if dist > threshold_dist:
                 count += 1
-                plot_input_target_output(inp, pos, mu, cov)
+                visualizer.plot_input_target_output(inp, pos, mu, cov, skew=skew)
                 plt.title("Anomaly with distance " + str(dist))
                 plt.savefig("plots/anomalies/anomaly_" + str(count) + ".png")
                 plt.close()
             #elif var_s > threshold_vars:
              #   count += 1
-              #  plot_input_target_output(inp, pos, mu, cov)
+              #  plot_input_target_output(inp, pos, mu, cov, skew=skew)
                # plt.title("anomaly due to large variance: var size = " + str(var_s))
                # plt.savefig("plots/anomalies/anomaly_" + str(count) + ".png")
                 #plt.close()
@@ -254,9 +181,10 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
             frame_info = frame_infos[0]
             frame_tensor = get_downsampled_tensor_img(frame_info[0], dim_x, dim_y)
 
+            skew = anomaly.prediction.lambda_skew
             mask_interest_np = create_mask_tensor(dim_x, dim_y, [anomaly.input], scale=False).numpy()
-            make_plot(frame_tensor.numpy(), mask_interest_np, np.array(anomaly.target), np.array(anomaly.prediction.mean), 
-                      np.array(anomaly.prediction.variance), dist=anomaly.prediction.distance_of_target)
+            visualizer.make_plot(frame_tensor.numpy(), mask_interest_np, np.array(anomaly.target), np.array(anomaly.prediction.mean), 
+                      np.array(anomaly.prediction.variance), dist=anomaly.prediction.distance_of_target, skew_lambda=np.array(skew) if skew is not None else None)
             
             plt.savefig(path + "a" + str(int(img_count)) + ".png")
             img_count += 1
@@ -266,7 +194,6 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
 
 
 def get_meaningful_unlikely_samples(samples_with_stats: List[inferencing.InferenceResult], dist_thr) -> List[inferencing.InferenceResult]:
-    # 4 - bbox input; 2 - target position; 2 - output mean; 3 - cholesky of output cov 
     anomaly_samples = get_unlikely_samples(samples_with_stats, dist_thr)
     
     # remove samples whose id only exists once

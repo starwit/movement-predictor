@@ -11,7 +11,7 @@ from collections import defaultdict
 import pickle
 import math
 
-from movementpredictor.data.trackedobjectposition import TrackedObjectPosition
+from movementpredictor.data.datamanagement import TrackedObjectPosition
 
 
 log = logging.getLogger(__name__)
@@ -50,8 +50,8 @@ def getTorchDataSet(path_store, val_split_ratio=None):
 
 
 def getTorchDataLoader(dataset, shuffle=True):
-    batch_size = 8
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=True)
+    batch_size = 16
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=False)
 
 
 def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], path_frame: str, frame_rate) -> DataLoader:
@@ -113,37 +113,37 @@ def make_input_target_pairs(tracks: dict, frame_rate: float) -> Dataset:
         if len(trajectory) == 0:
             continue
         
-        cars = [input_tr.get_class_id() == 2 for input_tr in trajectory]
+        cars = [input_tr.class_id == 2 for input_tr in trajectory]
         if sum(cars) / len(cars) > 0.8:      # only examine vehicles that are at least 80% classified as a car -> high probability of actually being a car
             for i, input_tr in enumerate(trajectory):
-                timecur = input_tr.get_capture_ts()
+                timecur = input_tr.capture_ts
                 ts = []
 
                 for next_tr in trajectory[i:]:
                     ts.append(next_tr)
-                    if next_tr.get_capture_ts() - timecur > time_interval_in_millisec:
+                    if next_tr.capture_ts - timecur > time_interval_in_millisec:
                         # make sure the object is detected in at least 80% of the frames 
-                        if len(ts) >= 0.8*(time_interval_in_millisec/1000)*frame_rate: #and next_tr.get_capture_ts() - ts[-2].get_capture_ts() < 500:
+                        if len(ts) >= 0.8*(time_interval_in_millisec/1000)*frame_rate: #and next_tr.capture_ts - ts[-2].capture_ts < 500:
                             input_target_pairs.append([input_tr, get_position_after_time(ts, prediction_step)])
                         break
     
     timestamp_dict = defaultdict(list)
     for _, trajectory in tracks.items():
         for track in trajectory:
-            timestamp_dict[track.get_capture_ts()].append(track)
+            timestamp_dict[track.capture_ts].append(track)
 
     for i, (inp, tar) in tqdm(enumerate(input_target_pairs), desc="creating dataset - collecting all bboxs"):
-        other_vehicles = timestamp_dict[inp.get_capture_ts()]
-        bboxs = [vehicle.get_bbox() for vehicle in other_vehicles]
-        angles = [vehicle.get_movement_angle() for vehicle in other_vehicles]
+        other_vehicles = timestamp_dict[inp.capture_ts]
+        bboxs = [vehicle.bbox for vehicle in other_vehicles]
+        angles = [vehicle.movement_angle for vehicle in other_vehicles]
 
         bboxs_other = np.array(bboxs, dtype=np.float32)
         angles_other = np.array(angles, dtype=np.float32)
-        input_bbox = np.array(inp.get_bbox(), dtype=np.float32)
+        input_bbox = np.array(inp.bbox, dtype=np.float32)
         target_pos = np.array(tar, dtype=np.float32)
-        frame_ts = np.str_(inp.get_capture_ts())
-        obj_id = np.str_(inp.get_uuid())
-        angle = np.float32(inp.get_movement_angle())
+        frame_ts = np.str_(inp.capture_ts)
+        obj_id = np.str_(inp.uuid)
+        angle = np.float32(inp.movement_angle)
 
         input_target_pairs[i] = [bboxs_other, angles_other, input_bbox, target_pos, frame_ts, obj_id, angle]
     
@@ -152,11 +152,11 @@ def make_input_target_pairs(tracks: dict, frame_rate: float) -> Dataset:
 
 def get_position_after_time(ts, target_time):
 
-    times = [track.get_capture_ts() for track in ts]
-    xs = [track.get_center()[0] for track in ts]
-    ys = [track.get_center()[1] for track in ts]
+    times = [track.capture_ts for track in ts]
+    xs = [track.center[0] for track in ts]
+    ys = [track.center[1] for track in ts]
     
-    target_time_stamp = ts[0].get_capture_ts() + target_time
+    target_time_stamp = ts[0].capture_ts + target_time
     x_interp = np.interp(target_time_stamp, times, xs)
     y_interp = np.interp(target_time_stamp, times, ys)
 
@@ -309,7 +309,7 @@ class CNNData(Dataset):
         obj_id = self.ids[idx]
         angle = self.angles[idx]
 
-        #frame_tensor = self.frames[inp_track.get_capture_ts()].unsqueeze(0)
+        #frame_tensor = self.frames[inp_track.capture_ts].unsqueeze(0)
         shape = (self.frame.shape[-1], self.frame.shape[-2])
         #mask_tensor_others = create_mask_tensor(shape[0], shape[1], other_bboxs).unsqueeze(0)
         #mask_tensors_interest = create_mask_angle_tensor(shape[0], shape[1], inp_track, angle=self.angles[idx])

@@ -2,12 +2,13 @@ import torch
 from tqdm import tqdm
 import numpy as np
 from pydantic import BaseModel, ConfigDict
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 
 class PredictionStats(BaseModel):
     mean: List[float]
     variance: List[List[float]]
+    lambda_skew: Optional[List[float]] = None
     distance_of_target: float
 
 
@@ -37,27 +38,36 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
 
     with torch.no_grad():
         for i, (x, target, ts, id) in tqdm(enumerate(dataloader), desc="inferencing movement predictor CNN"):
-            #if i == 5000:
+            #if i == 1000:
              #   break
             
             x = x.to(device)
+            target = target.to(device)
+            prediction = model(x)
 
-            mu_batch, cov_batch = model(x)
-            mu_batch, cov_batch = mu_batch.cpu(), cov_batch.cpu()
-            target = target.cpu()
+            #if len(output) == 2:
+             #   mu_batch, cov_batch = output
+                #mu_batch, cov_batch = mu_batch.cpu(), cov_batch.cpu()
+            #elif len(output) == 3:
+             #   mu_batch, cov_batch, lambda_skew_batch = output
+                #mu_batch, cov_batch, lambda_skew_batch = mu_batch.cpu(), cov_batch.cpu(), lambda_skew_batch.cpu()
+            
+            #target = target.cpu()
 
-            eye = torch.eye(cov_batch.shape[-1], device=cov_batch.device).expand_as(cov_batch)
-            sigma_stable = cov_batch + 1e-6 * eye
+            ModelArchitecure = type(model)
+            mahalanobis, _ = ModelArchitecure.mahalanobis_distance(target, prediction)
+            mahalanobis = torch.sqrt(mahalanobis.squeeze())
 
-            sigma_inv = torch.inverse(sigma_stable)
+            lambda_skew_batch = [None for _ in range(len(target))]
+            if len(prediction) == 2:
+                mu_batch, cov_batch = prediction
+            elif len(prediction) == 3:
+                mu_batch, cov_batch, lambda_skew_batch = prediction
+                lambda_skew_batch = lambda_skew_batch.cpu().numpy()
 
-            # Compute Mahalanobis distance for the entire batch
-            diff = (target - mu_batch).unsqueeze(-1)  # Shape: (batch, 2, 1)
-            mahalanobis = torch.sqrt(torch.bmm(torch.bmm(diff.transpose(1, 2), sigma_inv), diff).squeeze())
+            mu_batch, cov_batch, mahalanobis, target = mu_batch.cpu().numpy(), cov_batch.cpu().numpy(), mahalanobis.cpu().numpy(), target.cpu().numpy()
 
-            mu_batch, cov_batch, mahalanobis, target = mu_batch.numpy(), cov_batch.numpy(), mahalanobis.numpy(), target.numpy()
-
-            for inp, mu, cov, pos, timestamp, obj_id, dist in zip(x, mu_batch, cov_batch, target, ts, id, mahalanobis):
+            for inp, mu, cov, lambda_skew, pos, timestamp, obj_id, dist in zip(x, mu_batch, cov_batch, lambda_skew_batch, target, ts, id, mahalanobis):
                 stats = InferenceResult(
                     input=get_bounding_box_info(inp),
                     target=pos.tolist(),
@@ -65,6 +75,9 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
                     timestamp=timestamp,
                     obj_id=obj_id
                 )
+                if lambda_skew is not None:
+                    stats.prediction.lambda_skew = lambda_skew
+
                 samples_with_stats.append(stats)
         
     return samples_with_stats
