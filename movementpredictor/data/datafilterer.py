@@ -1,7 +1,7 @@
 import logging
 from math import atan, degrees
 from typing import Dict
-from movementpredictor.data.trackedobjectposition import TrackedObjectPosition
+from movementpredictor.data.datamanagement import TrackedObjectPosition
 from tqdm import tqdm
 import numpy as np
 from sklearn.linear_model import TheilSenRegressor
@@ -53,14 +53,14 @@ class DataFilterer():
             if len(tracks_of_object) < self.min_length:
                 continue
 
-            bboxes = [track.get_bbox() for track in tracks_of_object]
-            #timestamps = [track.get_capture_ts() for track in tracks_of_object]
+            bboxes = [track.bbox for track in tracks_of_object]
+            #timestamps = [track.capture_ts for track in tracks_of_object]
             smooth_bboxes, smooth_centers = DataFilterer._smooth_trajectory_median(bboxes)#, timestamps)
             #smooth_bboxes, smooth_centers = DataFilterer._smooth_trajectory_median_(bboxes, timestamps)
 
             for track, bbox, center in zip(tracks_of_object, smooth_bboxes, smooth_centers):
-                track.set_bbox(bbox)
-                track.set_center(center)
+                track.bbox = bbox
+                track.center = center
 
             DataFilterer._calculate_movement_angle(tracks_of_object)
             new_mapping[key] = tracks_of_object
@@ -76,16 +76,16 @@ class DataFilterer():
                 continue
             
             # skip trajectories with no movement at all
-            min_x = min(tracks_of_object, key=lambda obj: obj.get_center()[0]).get_center()[0]
-            max_x = max(tracks_of_object, key=lambda obj: obj.get_center()[0]).get_center()[0]
+            min_x = min(tracks_of_object, key=lambda obj: obj.center[0]).center[0]
+            max_x = max(tracks_of_object, key=lambda obj: obj.center[0]).center[0]
             total_movement = np.linalg.norm(min_x - max_x)
 
             if total_movement < self.min_movement:
                 continue
             
             # sort out parts without movement
-            timestamps = np.array([track.get_capture_ts() for track in tracks_of_object])
-            traj = np.array([track.get_center() for track in tracks_of_object])
+            timestamps = np.array([track.capture_ts for track in tracks_of_object])
+            traj = np.array([track.center for track in tracks_of_object])
             keep = np.zeros(len(traj), dtype=bool)
 
             for i, (timestamp, point) in enumerate(zip(timestamps, traj)):
@@ -219,11 +219,11 @@ class DataFilterer():
 
         for i in range(len(tracks_of_object) - 6):
             tracks = tracks_of_object[i:i+7]
-            x = np.array([track.get_center()[0] for track in tracks]).reshape(-1, 1)
-            y = np.array([track.get_center()[1] for track in tracks]).ravel()
+            x = np.array([track.center[0] for track in tracks]).reshape(-1, 1)
+            y = np.array([track.center[1] for track in tracks]).ravel()
 
-            if np.linalg.norm(np.array(tracks[-1].get_center()) - np.array(tracks[0].get_center())) < 0.015 and i > 0:
-                angle = tracks_of_object[i-1].get_movement_angle()
+            if np.linalg.norm(np.array(tracks[-1].center) - np.array(tracks[0].center)) < 0.015 and i > 0:
+                angle = tracks_of_object[i-1].movement_angle
 
             else:
                 model = TheilSenRegressor()
@@ -231,31 +231,29 @@ class DataFilterer():
                 slope = model.coef_[0]
                 intercept = model.intercept_
                 x_min = np.min(x)
+
                 point1 = [x_min, slope * x_min + intercept]
                 point2 = [x_min + 0.5, slope * (x_min + 0.5) + intercept]
 
-                prev_track, next_track = TrackedObjectPosition(), TrackedObjectPosition()
-                prev_track.set_center(point1)
-                next_track.set_center(point2)
-                angle = DataFilterer._get_angle(next_track, prev_track)
+                angle = DataFilterer._get_angle(point2, point1)
 
-            tracks_of_object[i+3].set_movement_angle(angle)
+            tracks_of_object[i+3].movement_angle = angle
 
             if i == 0:
-                tracks_of_object[i].set_movement_angle(angle)
-                tracks_of_object[i+1].set_movement_angle(angle)
-                tracks_of_object[i+2].set_movement_angle(angle)
+                tracks_of_object[i].movement_angle = angle
+                tracks_of_object[i+1].movement_angle = angle
+                tracks_of_object[i+2].movement_angle = angle
                 
             if i == len(tracks_of_object) - 7:
-                tracks_of_object[i+4].set_movement_angle(angle)
-                tracks_of_object[i+5].set_movement_angle(angle)
-                tracks_of_object[i+6].set_movement_angle(angle)
+                tracks_of_object[i+4].movement_angle = angle
+                tracks_of_object[i+5].movement_angle = angle
+                tracks_of_object[i+6].movement_angle = angle
     
 
     @staticmethod
-    def _get_angle(track, previous_track) -> float:
-        delta_x = track.center[0] - previous_track.center[0]
-        delta_y = (track.center[1] - previous_track.center[1]) * (-1)
+    def _get_angle(center, previous_center) -> float:
+        delta_x = center[0] - previous_center[0]
+        delta_y = (center[1] - previous_center[1]) * (-1)
         if delta_x == 0 or delta_y == 0:
             return -1
 

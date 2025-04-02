@@ -1,16 +1,26 @@
 
-from movementpredictor.data.trackedobjectposition import TrackedObjectPosition
 from tqdm import tqdm
 import logging
 import pybase64
 import numpy as np
 import cv2
 import torch
+from typing import List, Optional
+from pydantic import BaseModel
 
 from visionapi.sae_pb2 import SaeMessage
 from visionlib import saedump
 
 log = logging.getLogger(__name__)
+
+
+class TrackedObjectPosition(BaseModel):
+    capture_ts: int 
+    uuid: str 
+    class_id: int 
+    center: List[float]  # [x, y]
+    bbox: List[List[float]]  # [[x1, y1], [x2, y2]]
+    movement_angle: Optional[float] = None 
 
 
 def get_downsampled_tensor_img(frame, dim_x, dim_y):
@@ -76,6 +86,7 @@ class TrackingDataManager:
                     #if count > 1000:
                      #   break
 
+                    # TODO: 1000000 entfernen und die Werte irgendiwe anders in 3 Datensätze aufteilen
                     if  num_batch is None or (count >= num_batch*100000 and (count < (num_batch+1)*100000 or num_batch == 11)):
                         event = saedump.Event.model_validate_json(message)
                         proto_bytes = pybase64.standard_b64decode(event.data_b64)
@@ -125,12 +136,19 @@ class TrackingDataManager:
                 if inferencing and (min_x <= self.border_threshold[0] or min_y <= self.border_threshold[1] or max_x >= outer_threshold_x or max_y >= outer_threshold_y):
                     continue
 
-                track = TrackedObjectPosition()
-                track.set_capture_ts(proto.frame.timestamp_utc_ms)
-                track.set_uuid(det.object_id.hex())
-                track.set_class_id(det.class_id)
-                track.set_center(((min_x + max_x) * 0.5, (min_y + max_y) * 0.5))
-                track.set_bbox([[min_x, min_y], [max_x, max_y]])
+                #track = TrackedObjectPosition()
+                #track.set_capture_ts(proto.frame.timestamp_utc_ms)
+                #track.set_uuid(det.object_id.hex())
+                #track.set_class_id(det.class_id)
+                #track.set_center(((min_x + max_x) * 0.5, (min_y + max_y) * 0.5))
+                #track.set_bbox([[min_x, min_y], [max_x, max_y]])
+                capture_ts = proto.frame.timestamp_utc_ms
+                uuid = det.object_id.hex()
+                class_id = det.class_id
+                center = ((min_x + max_x) * 0.5, (min_y + max_y) * 0.5)
+                bbox = [[min_x, min_y], [max_x, max_y]]
+                track = TrackedObjectPosition(capture_ts=capture_ts, uuid=uuid, class_id=class_id, center=center, bbox=bbox)
+
                 extracted_tracks.append(track)
         
         return extracted_tracks
