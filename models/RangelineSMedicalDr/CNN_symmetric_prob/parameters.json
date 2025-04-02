@@ -1,9 +1,0 @@
-{
-    "time": "2025-03-25 17:14:33",
-    "model_name": "CNN",
-    "training_data": "2024-10-23T12-03-05-0400_RangelineSMedicalDr_36h.saedump",
-    "dim_x": 120,
-    "dim_y": 120,
-    "percentage_anomaly": 99.98,
-    "anomaly_threshold": 0.04745056280344748
-}
