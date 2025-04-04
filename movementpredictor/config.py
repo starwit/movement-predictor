@@ -20,6 +20,9 @@ class ModelConfig:
         self.path_model = os.path.join("models", self.camera, self.name_model)
         self.path_store_data = os.path.join("movementpredictor/data/datasets", self.camera, self.name_data)
 
+        self.path_plots = os.path.join("plots", self.camera, self.name_model)
+        os.makedirs(self.path_plots, exist_ok=True)
+
     @classmethod
     def get_instance(cls):
         if cls.instance is None:
