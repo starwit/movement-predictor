@@ -23,21 +23,7 @@ from visionlib import saedump
 log = logging.getLogger(__name__)
 
 
-def visualValidation(model, dataloader, num_plots=100) -> None:
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    with torch.no_grad():
-        for count, (x, target, _, _) in enumerate(dataloader):
-            if count >= num_plots: break
-            model_data = torch.tensor(x).to(device)
-            mu, sigma, skew = model(model_data)
-
-            visualizer.plot_input_target_output(x[0], target[0], mu[0].detach().cpu().numpy(), sigma[0].detach().cpu().numpy(), skew[0].detach().cpu().numpy())
-            plt.savefig("plots/outputAE" + str(count) + ".png")
-            plt.close()
-
-
-def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.InferenceResult], percentage_p=99.99, path=None):
+def calculate_and_visualize_threshold(samples_with_stats, path_plots, percentage_p=99.99, path=None):
     '''computes the thresholds for finding an anomaly based on the variance based distance to the mean'''
 
     dists = [sample.prediction.distance_of_target for sample in samples_with_stats]
@@ -49,12 +35,13 @@ def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.Infer
     plt.xlabel('dist')
     plt.ylabel('amount')
     plt.axvline(x=threshold_dists, color='black', linestyle='dashed', label='threshold')
-    plt.savefig("plots/distances.png" if path is None else path)
+
+    path = os.path.join(path_plots, "distances.png") if path is None else path
+    plt.savefig(path)
     plt.show()
     plt.clf()
 
     return threshold_dists
-
 '''
     var_size = [np.diag(sample["prediction"]["variance"]).sum() for sample in samples_with_stats]
     threshold_vars = np.percentile(var_size, percentage_var)
@@ -72,19 +59,7 @@ def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.Infer
     return threshold_dists, threshold_vars''
 '''
 
-
-def store_parameter(path_model, dist_thr, percentage_anomaly):
-    with open(path_model + "/parameters.json", "r") as json_file:
-        paras = json.load(json_file)
-    
-    paras["percentage_anomaly"] = percentage_anomaly
-    paras["anomaly_threshold"] = dist_thr
-
-    with open(path_model + "/parameters.json", "w") as json_file:
-        json.dump(paras, json_file, indent=4)
-
-
-def plot_unlikely_samples(test, threshold_dist, samples_with_stats: List[inferencing.InferenceResult]):
+def plot_unlikely_samples(samples_with_stats, test, threshold_dist, path_plots):
     count = 0
     batch_size = test.batch_size
 
@@ -104,30 +79,50 @@ def plot_unlikely_samples(test, threshold_dist, samples_with_stats: List[inferen
     else:
         skews = [[None] * batch_size for _ in range(len(mus))]
 
-    os.makedirs("plots/anomalies", exist_ok=True)
+    path = os.path.join(path_plots, "anomalies")
+    os.makedirs(path, exist_ok=True)
     for i, (x, target, _, _) in tqdm(enumerate(test)):
         #if i == 1000:
-         #   break
+        #   break
         for mu, cov, skew, inp, pos, dist in zip(mus[i], covs[i], skews[i], x, target, dists[i]):
             if dist > threshold_dist:
                 count += 1
                 visualizer.plot_input_target_output(inp, pos, mu, cov, skew=skew)
                 plt.title("Anomaly with distance " + str(dist))
-                plt.savefig("plots/anomalies/anomaly_" + str(count) + ".png")
+                plt.savefig(os.path.join(path, "anomaly_" + str(count) + ".png"))
                 plt.close()
             #elif var_s > threshold_vars:
-             #   count += 1
-              #  plot_input_target_output(inp, pos, mu, cov, skew=skew)
-               # plt.title("anomaly due to large variance: var size = " + str(var_s))
-               # plt.savefig("plots/anomalies/anomaly_" + str(count) + ".png")
+            #   count += 1
+            #  plot_input_target_output(inp, pos, mu, cov, skew=skew)
+            # plt.title("anomaly due to large variance: var size = " + str(var_s))
+            # plt.savefig("plots/anomalies/anomaly_" + str(count) + ".png")
                 #plt.close()
 
+def get_unlikely_samples(samples_with_stats, dist_thr) -> List[inferencing.InferenceResult]:
+    anomaly_samples: List[inferencing.InferenceResult] = []
 
-def find_intervals_containing_timestamp(timestamp, intervals):
-    return [interval for interval in intervals if interval[1] <= timestamp <= interval[2]]
+    for sample in samples_with_stats:
+        if sample.prediction.distance_of_target > dist_thr:
+            anomaly_samples.append(sample)
+    
+    return anomaly_samples
 
 
-def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_dump, dim_x, dim_y):
+def get_meaningful_unlikely_samples(sampels_with_stats, dist_thr) -> List[inferencing.InferenceResult]:
+    anomaly_samples = get_unlikely_samples(sampels_with_stats, dist_thr)
+    
+    # remove samples whose id only exists once
+    anomaly_ids = [sample.obj_id for sample in anomaly_samples]
+    id_counts = Counter(anomaly_ids)
+    ids_to_remove = {id for id, count in id_counts.items() if count == 1}
+    indices_to_remove = [index for index, id in enumerate(anomaly_ids) if id in ids_to_remove]
+
+    anomalies = [sample for index, sample in enumerate(anomaly_samples) if index not in indices_to_remove]
+
+    return anomalies
+
+
+def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_dump, dim_x, dim_y, path_plots):
     anomaly_dict = defaultdict(list)
     anomaly_ts_int = [int(anomaly.timestamp) for anomaly in anomalies]
 
@@ -157,7 +152,7 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
             proto.ParseFromString(proto_bytes)
             frame_ts = proto.frame.timestamp_utc_ms
 
-            fitting_keys = find_intervals_containing_timestamp(frame_ts, video_dict.keys())
+            fitting_keys = _find_intervals_containing_timestamp(frame_ts, video_dict.keys())
 
             for key in fitting_keys:
                 frame_info = [proto.frame, None]
@@ -169,7 +164,7 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
 
     dict_count = 0
     for key in video_dict:
-        path = "plots/anomalies/" + str(dict_count) + "/"
+        path = os.path.join(path_plots, "anomalies/" + str(dict_count))
         os.makedirs(path, exist_ok=True)
         dict_count += 1
         img_count = 0
@@ -184,34 +179,25 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
             skew = anomaly.prediction.lambda_skew
             mask_interest_np = create_mask_tensor(dim_x, dim_y, [anomaly.input], scale=False).numpy()
             visualizer.make_plot(frame_tensor.numpy(), mask_interest_np, np.array(anomaly.target), np.array(anomaly.prediction.mean), 
-                      np.array(anomaly.prediction.variance), dist=anomaly.prediction.distance_of_target, skew_lambda=np.array(skew) if skew is not None else None)
+                    np.array(anomaly.prediction.variance), dist=anomaly.prediction.distance_of_target, skew_lambda=np.array(skew) if skew is not None else None)
             
-            plt.savefig(path + "a" + str(int(img_count)) + ".png")
+            plt.savefig(os.path.join(path, "a" + str(int(img_count)) + ".png"))
             img_count += 1
             plt.close()
         
         store_video(video_dict[key][1:], path)
 
 
-def get_meaningful_unlikely_samples(samples_with_stats: List[inferencing.InferenceResult], dist_thr) -> List[inferencing.InferenceResult]:
-    anomaly_samples = get_unlikely_samples(samples_with_stats, dist_thr)
-    
-    # remove samples whose id only exists once
-    anomaly_ids = [sample.obj_id for sample in anomaly_samples]
-    id_counts = Counter(anomaly_ids)
-    ids_to_remove = {id for id, count in id_counts.items() if count == 1}
-    indices_to_remove = [index for index, id in enumerate(anomaly_ids) if id in ids_to_remove]
-
-    anomalies = [sample for index, sample in enumerate(anomaly_samples) if index not in indices_to_remove]
-
-    return anomalies
+def _find_intervals_containing_timestamp(timestamp, intervals):
+    return [interval for interval in intervals if interval[1] <= timestamp <= interval[2]]
 
 
-def get_unlikely_samples(samples_with_stats: List[inferencing.InferenceResult], dist_thr) -> List[inferencing.InferenceResult]:
-    anomaly_samples: List[inferencing.InferenceResult] = []
+def store_parameter(path_model, dist_thr, percentage_anomaly):
+        with open(path_model + "/parameters.json", "r") as json_file:
+            paras = json.load(json_file)
+        
+        paras["percentage_anomaly"] = percentage_anomaly
+        paras["anomaly_threshold"] = dist_thr
 
-    for sample in samples_with_stats:
-        if sample.prediction.distance_of_target > dist_thr:
-            anomaly_samples.append(sample)
-    
-    return anomaly_samples
+        with open(path_model + "/parameters.json", "w") as json_file:
+            json.dump(paras, json_file, indent=4)

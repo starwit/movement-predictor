@@ -1,8 +1,12 @@
 import torch
 from tqdm import tqdm
 import numpy as np
-from pydantic import BaseModel, ConfigDict
-from typing import List, Dict, Optional
+from pydantic import BaseModel
+from typing import List, Optional
+import matplotlib.pyplot as plt
+import os
+
+from movementpredictor.anomalydetection import visualizer
 
 
 class PredictionStats(BaseModel):
@@ -83,22 +87,23 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
     return samples_with_stats
 
 
-'''
-def regularize_cov(cov, max_cond=8, min_achsis=0.01):
-    #eigenvalues, eigenvectors = np.linalg.eigh(cov)
-    #eigenvalues = np.maximum(eigenvalues, min_achsis)
-    #cov = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
+def visualValidation(model, dataloader, path_plots, num_plots=100) -> None:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    eigvals, eigvecs = np.linalg.eigh(cov)  
+    with torch.no_grad():
+        for count, (x, target, _, _) in enumerate(dataloader):
+            if count >= num_plots: break
+            model_data = torch.tensor(x).to(device)
+            prediction = model(model_data)
 
-    cond_number = eigvals.max() / eigvals.min()  
-    if cond_number > max_cond:
-        #print(f"Regularizing covariance matrix. Original cond: {cond_number}")
-        eigvals = np.maximum(eigvals, eigvals.max() / max_cond)  
-        cov = eigvecs @ np.diag(eigvals) @ eigvecs.T  
+            mu = prediction[0][0].detach().cpu().numpy()
+            sigma = prediction[1][0].detach().cpu().numpy()
+            skew = prediction[-1][0].detach().cpu().numpy() if len(prediction) == 3 else None
+            visualizer.plot_input_target_output(x[0], target[0], mu, sigma, skew)
 
-    return cov'
-'''
+            path = os.path.join(path_plots, "outputAE" + str(count) + ".png")
+            plt.savefig(path)
+            plt.close()
 
 
 def get_bounding_box_info(input):

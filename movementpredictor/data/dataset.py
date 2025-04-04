@@ -163,7 +163,7 @@ def get_position_after_time(ts, target_time):
     return [x_interp, y_interp]
 
 
-def plotDataSamples(dataloader: DataLoader, amount: int):
+def plotDataSamples(dataloader: DataLoader, amount: int, path: str):
 
     for count, (sample_batch, target_batch, _, _) in enumerate(dataloader):
         if count >= amount: break
@@ -212,7 +212,7 @@ def plotDataSamples(dataloader: DataLoader, amount: int):
         plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
         plt.axis('off')
 
-        plt.savefig("plots/exampleInput" + str(count) + ".png")
+        plt.savefig(os.path.join(path, "exampleInput" + str(count) + ".png"))
         plt.close()
 
 

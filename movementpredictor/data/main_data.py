@@ -20,11 +20,11 @@ def main():
         trackedObjects = trackManager.getTrackedBaseData(config.path_sae_data, i, inferencing=False if i in [0,3,6,9] else True)           # 1'220'175 it in total
         trackedObjects = DataFilterer().apply_filtering(trackedObjects) 
         dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate, i)
-            
+    
     train_ds = dataset.getTorchDataSet(os.path.join(config.path_store_data, "train_cnn"))
     train_dl = dataset.getTorchDataLoader(train_ds, shuffle=False)
 
-    dataset.plotDataSamples(train_dl, 50)
+    dataset.plotDataSamples(train_dl, 50, config.path_plots)
 
 if __name__ == "__main__":
     main()

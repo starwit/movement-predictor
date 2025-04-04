@@ -14,7 +14,8 @@ def main():
     
     model, history = training.trainAndStoreCNN(config.path_store_data, config.path_model, config.name_model)
     training.store_parameters(history, config)
-    training.plot_loss_curve(history)
+
+    training.plot_loss_curve(history, config.path_plots)
     model.eval()
     
 if __name__ == "__main__":

@@ -120,7 +120,7 @@ def store_parameters(history, config: ModelConfig):
       
 
 
-def plot_loss_curve(history):
+def plot_loss_curve(history, path):
     plt.plot(history['train'], label='Train Loss')
     plt.plot(history['val'], label='Val Loss')
     plt.xlabel('Iteration (in 10000 steps)')
@@ -129,7 +129,7 @@ def plot_loss_curve(history):
     plt.legend()
     plt.grid(True)
     
-    plt.savefig("plots/loss_curve.png")
+    plt.savefig(os.path.join(path, "loss_curve.png"))
     plt.show()
     plt.clf()
 
