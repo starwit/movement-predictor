@@ -93,25 +93,24 @@ def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None
     plt.axis('off')
 
 
-def plot_gaussian_variance(ax, frame_rgb, mu, sigma, scale_factor=0.1, num_points=100):
+def plot_gaussian_variance(ax, frame_rgb, mu, sigma, scale_factor=0.005, num_points=100):
     """Plottet die symmetrische Gaussian-Varianz als Punktwolke."""
     
     height, width, _ = frame_rgb.shape
     angles = np.linspace(0, 2 * np.pi, num_points)
     
-    # Einheitskreis-Punkte generieren
+    # generate points on unit circle
     circle_x = np.cos(angles)
     circle_y = np.sin(angles)
     circle = np.stack([circle_x, circle_y], axis=1)
     
-    # Kovarianz-Eigenwerte/-vektoren bestimmen
-    eigenvalues, eigenvectors = np.linalg.eigh(sigma * width * scale_factor)
+    eigenvalues, eigenvectors = np.linalg.eigh(sigma * scale_factor)
     
-    # Skalierung durch Eigenwerte
+    # skale points with eigenvalues
     transformed_points = circle @ np.sqrt(np.diag(eigenvalues)) @ eigenvectors.T  
     points = mu + transformed_points * 0.5   
 
-    # In Bild-Koordinaten umrechnen
+    # get the frame coordiantes
     points[:, 0] *= width
     points[:, 1] *= height
     mu_scaled = (mu[0] * width, mu[1] * height)
@@ -133,7 +132,7 @@ def plot_skewed_mahalanobis_points(ax, frame_rgb, mu, sigma, skew_lambda, scale_
     height, width, _ = frame_rgb.shape
     angles = np.linspace(0, 2 * np.pi, num_points)
     
-    # Einheitskreis-Punkte generieren
+    # generate points on unit circle and skew based on skewing parameter
     circle_x = np.cos(angles)
     circle_y = np.sin(angles)
     skew_factor_x = np.exp(-np.sign(circle_x) * skew_lambda[0])
@@ -143,16 +142,12 @@ def plot_skewed_mahalanobis_points(ax, frame_rgb, mu, sigma, skew_lambda, scale_
 
     circle = np.stack([circle_x, circle_y], axis=1)
 
-    # Kovarianz-Eigenwerte/-vektoren bestimmen
     eigvals, eigvecs = np.linalg.eigh(sigma * scale_factor)
-    
-    # Skalierung durch Eigenwerte
     transformed_points = circle @ np.sqrt(np.diag(eigvals)) @ eigvecs.T  
     
     # calculate skew factor: negative input because the circle points here are not the error but rather the opposite (allowed errors): vairance is larger in places of larger allowed error
     #skew_factors = np.exp(-np.sign(transformed_points) * skew_lambda)
     
-    # Punkte in den Mahalanobis-Skalenraum transformieren
     #scaled_points = transformed_points * skew_factors 
     #points = mu + scaled_points   
     points = mu + transformed_points

@@ -75,12 +75,11 @@ class CNN_symmetric_prob(CNNBaseProbabilistic):
         Negative Log-Likelihood (NLL) Loss with regularization
         
         Args:
-            y_true (torch.Tensor): Wahrer Wert, Form (batch_size, 2).
-            mu (torch.Tensor): Erwartungswert (mean), Form (batch_size, 2).
-            sigma (torch.Tensor): Kovarianzmatrix, Form (batch_size, 2, 2).
+            y_true (torch.Tensor): true future position (batch_size, 2)
+            prediction: mean (torch.Tensor, (batch_size, 2)), covariance matrix (torch.Tensor, (batch_size, 2, 2))
             
         Returns:
-            torch.Tensor: Durchschnittlicher NLL-Wert über den Batch.
+            torch.Tensor: mean nll-loss of whole batch.
         """
         epsilon = 1e-6  
         mahalanobis, sigma_stable = CNN_symmetric_prob.mahalanobis_distance(y_true, prediction, epsilon) 
@@ -88,11 +87,9 @@ class CNN_symmetric_prob(CNNBaseProbabilistic):
         mahalanobis_scaled = mahalanobis * (trace_sigma + epsilon)
         #TODO: + trace anstatt * trace ausprobieren!!!!!
 
-        # NLL Loss: Mahalanobis-Distanz + Regularisierung
         loss = mahalanobis_scaled.squeeze() 
 
         return loss.mean()
-
 
 
 class CNN_asymmetric_prob(CNNBaseProbabilistic):
@@ -104,7 +101,7 @@ class CNN_asymmetric_prob(CNNBaseProbabilistic):
     def forward(self, x):
         x = self.forward_features(x)
         mean, sigma = self.forward_common_outputs(x)
-        skew_lambda = torch.tanh(self.skew_layer(x)) * 0.5  # Skewing ∈ (-0.5,0.5)
+        skew_lambda = torch.tanh(self.skew_layer(x)) * 0.2  # Skewing ∈ (-0.2,0.2)
         return mean, sigma, skew_lambda
     
     @staticmethod
@@ -129,6 +126,16 @@ class CNN_asymmetric_prob(CNNBaseProbabilistic):
     @staticmethod
     #https://pmc.ncbi.nlm.nih.gov/articles/PMC7615262/pdf/tmi-li-3231730.pdf
     def loss(y_true, prediction):
+        """
+        Skewed Negative Log-Likelihood (NLL) Loss with regularization
+        
+        Args:
+            y_true (torch.Tensor): true future position (batch_size, 2)
+            prediction: mean (torch.Tensor, (batch_size, 2)), covariance matrix (torch.Tensor, (batch_size, 2, 2)), skew parameters lambda (torch.Tensor, (batch_size, 2))
+            
+        Returns:
+            torch.Tensor: mean nll-loss of whole batch.
+        """
         epsilon = 1e-6  
         skewed_mahalanobis, sigma_stable = CNN_asymmetric_prob.mahalanobis_distance(y_true, prediction, epsilon)
         loss = skewed_mahalanobis.squeeze() 
