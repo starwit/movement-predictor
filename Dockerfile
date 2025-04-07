@@ -12,7 +12,7 @@ RUN curl -sSL https://install.python-poetry.org | python3 -
 ENV PATH="${POETRY_HOME}/bin:${PATH}"
 
 # Copy only files that are necessary to install dependencies
-COPY poetry.lock poetry.toml pyproject.toml /code/
+COPY poetry.lock poetry.toml pyproject.toml README.md /code/
 
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
