@@ -26,19 +26,20 @@ A visualisation of the preliminary approach can be seen in docs/ApproachVisualiz
 
 The repository can be used for 3 separated steps: 
 - the preparation of datasets based on the data provided by the sae (movementpredictor/data)
-  - you need to store the sae data as a file of type '.saedump' and provide the file's path in the '.env' variable 'PATH_SAE_DATA' and then run 'main_data.py' (the generated datasts will be stored in 'PATH_STORE_DATA') 
-  - necessary program input: 'PATH_SAE_DATA', 'PATH_STORE_DATA' and 'DIM_X' and 'DIM_Y' to provide the frame resolution
+  - you need to store the sae data as a file of type '.saedump' and provide the file's path in the '.env' variable 'PATH_SAE_DATA' and then run 'main_data.py' (the generated datasts will be stored in movementpredictor/data/datasets/CAMERA/NAME_DATA) 
+  - necessary program input: 'PATH_SAE_DATA', 'CAMERA', 'NAME_DATA' and 'DIM_X' and 'DIM_Y' to provide the frame resolution
 - the training of the movement-prediction convolutional neural network (movementpredictor/cnn)
   - train the model by running 'main_training.py'
   - necessary program input: all environment variables to store everything for successful later inferencing, most importantly:
-    -  'PATH_STORE_DATA' (path to the previously generated datasets) and 
-    -  'PATH_INFERENCE_BUNDLE' (path where to store the model weights and all parameters necessary to use the model for inferencing)
+    -  'NAME_MODEL' (the model architecture that should be used)
+    -  'CAMERA', 'NAME_DATA' (Camera from which the data originates -> data should be stored at movementpredictor/data/datasets/CAMERA/NAME_DATA)
+  -  the model will be stored at models/CAMERA/NAME_MODEL (model weights and all parameters necessary to use the model for inferencing)
 - calculation of parameters for the anomaly detection (movementpredictor/anomalydetection) 
   - you can use the trained CNN to make predictions on huge datasets
   - based on all outputs a probability threshold is calculated so that 'PERCENTAGE_OF_ANOMALIES' percent of all samples are considered as normal
   - the treshold will be stored in the same location as the model weights
   - future work: these anomalies should be further clustered
-  - necessary program input: 'PATH_STORE_DATA', 'PATH_INFERENCE_BUNDLE' (to get the trained weights and to store parameters like the threshold), 'PERCENTAGE_OF_ANOMALIES' and if you want to generate videos of found anomalies you need 'PATH_SAE_DATA'
+  - necessary program input: 'CAMERA', 'NAME_MODEL', 'NAME_DATA' (to get the trained weights, data and to store parameters like the threshold), 'PERCENTAGE_OF_ANOMALIES' and if you want to generate videos of found anomalies you need 'PATH_SAE_DATA'
   
 ## Library Usage
 
@@ -48,7 +49,9 @@ After performing these 3 steps you the movement predictor anomaly detection is r
 - generate the dataset with 'makeTorchDataLoader' 
 - load the model: 
   - 'import torch'
-  - 'model = CNN()'
+  - 'from movementpredictor.cnn import model_architectures'
+  - 'ModelClass = getattr(model_architectures, config.name_model, None)'
+  - 'model = ModelClass()'
   - 'weights = torch.load(path)'
   - 'model.load_state_dict(weights)' 
 - inferencing with 'inference_with_stats'
