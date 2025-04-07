@@ -123,7 +123,7 @@ def make_input_target_pairs(tracks: dict, frame_rate: float) -> Dataset:
                     ts.append(next_tr)
                     if next_tr.capture_ts - timecur > time_interval_in_millisec:
                         # make sure the object is detected in at least 80% of the frames 
-                        if len(ts) >= 0.8*(time_interval_in_millisec/1000)*frame_rate: #and next_tr.capture_ts - ts[-2].capture_ts < 500:
+                        if len(ts) >= 0.8*(time_interval_in_millisec/1000)*frame_rate: 
                             input_target_pairs.append([input_tr, get_position_after_time(ts, prediction_step)])
                         break
     

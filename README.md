@@ -44,13 +44,13 @@ The repository can be used for 3 separated steps:
 ## Library Usage
 
 After performing these 3 steps you the movement predictor anomaly detection is ready to be used. All necessary functions and Classes can be imported like 'from movementpredictor import ...'. To perform inferencing and extraction of anomalies the recommended workflow is the following: 
-- extract sae data, transform each track to type 'TrackedObjectPosition' 
+- extract sae data with 'TrackingDataManager'
 - smooth and filter the tracks with 'DataFilterer.apply_filtering'
 - generate the dataset with 'makeTorchDataLoader' 
 - load the model: 
   - 'import torch'
   - 'from movementpredictor.cnn import model_architectures'
-  - 'ModelClass = getattr(model_architectures, config.name_model, None)'
+  - 'ModelClass = getattr(model_architectures, parameters.name_model, None)'
   - 'model = ModelClass()'
   - 'weights = torch.load(path)'
   - 'model.load_state_dict(weights)' 

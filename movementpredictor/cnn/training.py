@@ -110,7 +110,7 @@ def store_parameters(history, config: ModelConfig):
 
    paras = {
       "time": timestamp,
-      "model_name": "CNN",
+      "model_name": config.name_model,
       "training_data": os.path.basename(config.path_sae_data),
       "dim_x": config.dim_x,
       "dim_y": config.dim_y
