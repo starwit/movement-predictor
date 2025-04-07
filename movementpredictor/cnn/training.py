@@ -26,6 +26,7 @@ def trainAndStoreCNN(path_data, path_model, model_name) -> Tuple[nn.Module, Dict
   ModelClass = getattr(model_architectures, model_name, None)
   if ModelClass is None:
     log.error(f"{model_name} is not a known model architecture.")
+    exit(1)
   
   device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
   model = ModelClass()
