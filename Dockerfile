@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-0
 
 WORKDIR /code
-RUN poetry install
+RUN poetry install --no-root
     
 # Copy the rest of the project
 COPY . /code/
