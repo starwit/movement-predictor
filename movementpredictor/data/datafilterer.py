@@ -148,71 +148,6 @@ class DataFilterer():
 
         return smoothed_bboxes, smoothed_centers
     
-    '''
-    def _smooth_trajectory_median_(bboxes, timestamps, kernel_size=5, speed_threshold=5.0, angle_threshold=60.0):
-        bboxes = np.array(bboxes)
-        timestamps = np.array(timestamps)
-
-        x_min, y_min = bboxes[:, 0, 0], bboxes[:, 0, 1]
-        x_max, y_max = bboxes[:, 1, 0], bboxes[:, 1, 1]
-
-        cx = (x_min + x_max) / 2
-        cy = (y_min + y_max) / 2
-
-        dt = np.diff(timestamps)
-        dt[dt == 0] = np.nan
-
-        distances = np.sqrt(np.diff(cx)**2 + np.diff(cy)**2)
-        speeds = distances / dt 
-
-        directions = np.arctan2(np.diff(cy), np.diff(cx)) * (180 / np.pi)  
-        angle_changes = np.abs(np.diff(directions))  
-
-        bad_indices = np.where(
-            (speeds[1:] > speed_threshold * speeds[:-1]) | 
-            (speeds[1:] < speeds[:-1] / speed_threshold) |
-            (angle_changes > angle_threshold)
-        )[0] + 1  # +1, weil diff() die Länge um 1 reduziert
-
-        x_min[bad_indices] = np.nan
-        y_min[bad_indices] = np.nan
-        x_max[bad_indices] = np.nan
-        y_max[bad_indices] = np.nan
-
-        x_min_smooth = medfilt(np.nan_to_num(x_min, nan=np.nanmedian(x_min)), kernel_size)
-        y_min_smooth = medfilt(np.nan_to_num(y_min, nan=np.nanmedian(y_min)), kernel_size)
-        x_max_smooth = medfilt(np.nan_to_num(x_max, nan=np.nanmedian(x_max)), kernel_size)
-        y_max_smooth = medfilt(np.nan_to_num(y_max, nan=np.nanmedian(y_max)), kernel_size)
-
-        # Fehlende Werte mit Interpolation auffüllen
-        def interpolate_nans(data):
-            """Interpolate missing values (NaNs) using linear interpolation."""
-            nans = np.isnan(data)
-            if np.any(nans):
-                interp_func = interp1d(
-                    np.where(~nans)[0], data[~nans], 
-                    kind="linear", bounds_error=False, fill_value="extrapolate"
-                )
-                data[nans] = interp_func(np.where(nans)[0])
-            return data
-
-        x_min_smooth = interpolate_nans(x_min_smooth)
-        y_min_smooth = interpolate_nans(y_min_smooth)
-        x_max_smooth = interpolate_nans(x_max_smooth)
-        y_max_smooth = interpolate_nans(y_max_smooth)
-
-        # Neue Bounding Boxes zusammensetzen
-        smoothed_bboxes = np.stack([
-            np.stack([x_min_smooth, y_min_smooth], axis=1),
-            np.stack([x_max_smooth, y_max_smooth], axis=1)
-        ], axis=1)
-
-        cx_smooth = (x_min_smooth + x_max_smooth) / 2
-        cy_smooth = (y_min_smooth + y_max_smooth) / 2
-        smoothed_centers = np.stack([cx_smooth, cy_smooth], axis=1)
-
-        return smoothed_bboxes, smoothed_centers
-    '''
 
     @staticmethod
     def _calculate_movement_angle(tracks_of_object: list[TrackedObjectPosition]):
@@ -230,10 +165,9 @@ class DataFilterer():
                 model.fit(x, y)
                 slope = model.coef_[0]
                 intercept = model.intercept_
-                x_min = np.min(x)
 
-                point1 = [x_min, slope * x_min + intercept]
-                point2 = [x_min + 0.5, slope * (x_min + 0.5) + intercept]
+                point1 = [x[0], slope * x[0] + intercept]
+                point2 = [x[-1], slope * x[-1] + intercept]
 
                 angle = DataFilterer._get_angle(point2, point1)
 
@@ -264,6 +198,7 @@ class DataFilterer():
             angle = 360. - angle
         elif delta_x < 0 and delta_y < 0:
             angle = 180. + angle
+
         return angle
 
 
