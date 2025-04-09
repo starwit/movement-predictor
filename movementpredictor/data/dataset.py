@@ -109,6 +109,8 @@ def make_input_target_pairs(tracks: dict, frame_rate: float) -> Dataset:
     prediction_step = 1000
     input_target_pairs = []
 
+    estimated_frames = round((time_interval_in_millisec / 1000) * frame_rate)
+
     for trajectory in tqdm(tracks.values(), desc="creating dataset - calculating target positions"):
         if len(trajectory) == 0:
             continue
@@ -116,16 +118,23 @@ def make_input_target_pairs(tracks: dict, frame_rate: float) -> Dataset:
         cars = [input_tr.class_id == 2 for input_tr in trajectory]
         if sum(cars) / len(cars) > 0.8:      # only examine vehicles that are at least 80% classified as a car -> high probability of actually being a car
             for i, input_tr in enumerate(trajectory):
-                timecur = input_tr.capture_ts
-                ts = []
+                if i + estimated_frames >= len(trajectory):
+                    break
+                ts_slice = trajectory[i: i + estimated_frames]
+                duration = ts_slice[-1].capture_ts - input_tr.capture_ts
 
-                for next_tr in trajectory[i:]:
-                    ts.append(next_tr)
-                    if next_tr.capture_ts - timecur > time_interval_in_millisec:
+                # make sure the object is detected in at least 80% of the frames
+                if duration*0.8 <=  time_interval_in_millisec:
+                    input_target_pairs.append([input_tr, get_position_after_time(ts_slice, prediction_step)])
+                #ts = []
+
+                #for next_tr in trajectory[i:]:
+                 #   ts.append(next_tr)
+                  #  if next_tr.capture_ts - timecur > time_interval_in_millisec:
                         # make sure the object is detected in at least 80% of the frames 
-                        if len(ts) >= 0.8*(time_interval_in_millisec/1000)*frame_rate: 
-                            input_target_pairs.append([input_tr, get_position_after_time(ts, prediction_step)])
-                        break
+                   #     if len(ts) >= 0.8*(time_interval_in_millisec/1000)*frame_rate: 
+                    #        input_target_pairs.append([input_tr, get_position_after_time(ts, prediction_step)])
+                     #   break
     
     timestamp_dict = defaultdict(list)
     for _, trajectory in tracks.items():
