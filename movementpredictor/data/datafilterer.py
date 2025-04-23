@@ -28,7 +28,7 @@ class DataFilterer():
 
         mapping = DataFilterer._map_tracks_to_id(tracking_list)
         mapping = self._extract_vehicles_with_movement(mapping)
-        mapping = self._smooth_trajectories_add_movement_angle(mapping)
+        mapping = self._smooth_trajectories_add_movement_info(mapping)
 
         return mapping
     
@@ -43,11 +43,11 @@ class DataFilterer():
             dict: the adapted tracks are grouped together to trajectories -> key: object id, value: list[TrackedObjectPosition] which is this object's trajectory
         """
         mapping = DataFilterer._map_tracks_to_id(tracking_list)
-        mapping = self._smooth_trajectories_add_movement_angle(mapping)
+        mapping = self._smooth_trajectories_add_movement_info(mapping)
 
         return mapping
 
-    def _smooth_trajectories_add_movement_angle(self, mapping):
+    def _smooth_trajectories_add_movement_info(self, mapping):
         new_mapping = {}
         for key, tracks_of_object in tqdm(mapping.items(), desc="smooth tracks"):
             if len(tracks_of_object) < self.min_length:
@@ -63,6 +63,7 @@ class DataFilterer():
                 track.center = center
 
             DataFilterer._calculate_movement_angle(tracks_of_object)
+            DataFilterer._calculate_movement_speed(tracks_of_object)
             new_mapping[key] = tracks_of_object
             
         return new_mapping
@@ -148,6 +149,22 @@ class DataFilterer():
 
         return smoothed_bboxes, smoothed_centers
     
+
+    @staticmethod
+    def _calculate_movement_speed(tracks_of_object: list[TrackedObjectPosition]):
+
+        for i in range(len(tracks_of_object)-1):
+            track = tracks_of_object[i]
+            next_track = tracks_of_object[i+1]
+
+            time_diff = next_track.capture_ts - track.capture_ts
+            distance = np.linalg.norm(next_track.center-track.center)
+            speed = distance/(time_diff/1000)           # distance in frame image per second
+
+            track.movement_speed = speed
+            if i == len(tracks_of_object)-2:
+                tracks_of_object[-1].movement_speed = speed
+
 
     @staticmethod
     def _calculate_movement_angle(tracks_of_object: list[TrackedObjectPosition]):

@@ -14,7 +14,7 @@ def main():
     trackManager = TrackingDataManager()
     trackedObjects = trackManager.getTrackedBaseData(config.path_sae_data, inferencing=True)
     trackedObjects = DataFilterer().apply_filtering(trackedObjects) 
-    dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate)
+    dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate, check_if_exist=True)
 
 
 if __name__ == "__main__":
