@@ -11,17 +11,19 @@ class ModelConfig:
 
         self.camera = os.getenv("CAMERA")
         self.name_data = os.getenv("NAME_DATA")
-        self.name_model = os.getenv("NAME_MODEL")
         self.path_sae_data = os.getenv("PATH_SAE_DATA")
-        self.dim_x = int(os.getenv("DIM_X"))
-        self.dim_y = int(os.getenv("DIM_Y"))
+        self.pixel_per_axis = int(os.getenv("PIXEL_PER_AXIS"))
         self.percentage_anomaly = float(os.getenv("PERCENTAGE_OF_ANOMALIES"))
 
-        self.path_model = os.path.join("models", self.camera, self.name_model)
+        self.model_architecture = os.getenv("MODEL_ARCHITECTURE", "CNN")      
+        self.output_distribution = os.getenv("OUTPUT_DISTR", "symmetric")
+        self.name_model = self.model_architecture + "_" + self.output_distribution + "_prob"
+
+        self.path_model = os.path.join("models", self.camera, self.name_data, self.name_model)
         self.path_store_data = os.path.join("movementpredictor/data/datasets", self.camera, self.name_data)
         os.makedirs(self.path_store_data, exist_ok=True)
 
-        self.path_plots = os.path.join("plots", self.camera, self.name_model)
+        self.path_plots = os.path.join("plots", self.camera, self.name_data, self.name_model)
         os.makedirs(self.path_plots, exist_ok=True)
 
     @classmethod

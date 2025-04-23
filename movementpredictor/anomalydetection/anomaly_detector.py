@@ -23,7 +23,45 @@ from visionlib import saedump
 log = logging.getLogger(__name__)
 
 
-def calculate_and_visualize_threshold(samples_with_stats, path_plots, percentage_p=99.99, path=None):
+def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.InferenceResult], path_plots, percentage_p=99.9, path=None):
+    """
+    computes threshold so that 'percentage_p' percent of object IDs (trajectories) are considered normal.
+    """
+
+    dist_obj_pairs = [(sample.prediction.distance_of_target, sample.obj_id) for sample in samples_with_stats]
+    dist_obj_pairs.sort(reverse=True, key=lambda x: x[0])
+
+    total_obj_ids = set(sample.obj_id for sample in samples_with_stats)
+    num_obj_ids_total = len(total_obj_ids)
+    num_obj_ids_target = int(np.ceil((100 - percentage_p) / 100 * num_obj_ids_total))
+
+    seen_obj_ids = set()
+    threshold_dists = None
+
+    for dist, obj_id in dist_obj_pairs:
+        seen_obj_ids.add(obj_id)
+        if len(seen_obj_ids) >= num_obj_ids_target:
+            threshold_dists = dist
+            break
+    
+    log.info("Distance-threshold: " + str(threshold_dists))
+    dists = [sample.prediction.distance_of_target for sample in samples_with_stats]
+
+    plt.hist(dists, bins=100, edgecolor='black')
+    plt.title('distance distribution')
+    plt.xlabel('dist')
+    plt.ylabel('amount')
+    plt.axvline(x=threshold_dists, color='black', linestyle='dashed', label='threshold')
+
+    path = os.path.join(path_plots, "distances.png") if path is None else path
+    plt.savefig(path)
+    plt.show()
+    plt.clf()
+
+    return threshold_dists
+
+
+def calculate_and_visualize_threshold_(samples_with_stats, path_plots, percentage_p=99.99, path=None):
     '''computes the thresholds for finding an anomaly based on the variance based distance to the mean'''
 
     dists = [sample.prediction.distance_of_target for sample in samples_with_stats]
@@ -59,7 +97,7 @@ def calculate_and_visualize_threshold(samples_with_stats, path_plots, percentage
     return threshold_dists, threshold_vars''
 '''
 
-def plot_unlikely_samples(samples_with_stats, test, threshold_dist, path_plots):
+def plot_unlikely_samples(samples_with_stats, frame, test, threshold_dist, path_plots):
     count = 0
     batch_size = test.batch_size
 
@@ -87,16 +125,11 @@ def plot_unlikely_samples(samples_with_stats, test, threshold_dist, path_plots):
         for mu, cov, skew, inp, pos, dist in zip(mus[i], covs[i], skews[i], x, target, dists[i]):
             if dist > threshold_dist:
                 count += 1
-                visualizer.plot_input_target_output(inp, pos, mu, cov, skew=skew)
+                visualizer.plot_input_target_output(frame, inp, pos, mu, cov, skew=skew)
                 plt.title("Anomaly with distance " + str(dist))
                 plt.savefig(os.path.join(path, "anomaly_" + str(count) + ".png"))
                 plt.close()
-            #elif var_s > threshold_vars:
-            #   count += 1
-            #  plot_input_target_output(inp, pos, mu, cov, skew=skew)
-            # plt.title("anomaly due to large variance: var size = " + str(var_s))
-            # plt.savefig("plots/anomalies/anomaly_" + str(count) + ".png")
-                #plt.close()
+
 
 def get_unlikely_samples(samples_with_stats, dist_thr) -> List[inferencing.InferenceResult]:
     anomaly_samples: List[inferencing.InferenceResult] = []
@@ -122,7 +155,7 @@ def get_meaningful_unlikely_samples(sampels_with_stats, dist_thr) -> List[infere
     return anomalies
 
 
-def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_dump, dim_x, dim_y, path_plots):
+def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_dump, pixel_per_axis, path_plots):
     anomaly_dict = defaultdict(list)
     anomaly_ts_int = [int(anomaly.timestamp) for anomaly in anomalies]
 
@@ -152,7 +185,7 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
             proto.ParseFromString(proto_bytes)
             frame_ts = proto.frame.timestamp_utc_ms
 
-            fitting_keys = _find_intervals_containing_timestamp(frame_ts, video_dict.keys())
+            fitting_keys = find_intervals_containing_timestamp(frame_ts, video_dict.keys())
 
             for key in fitting_keys:
                 frame_info = [proto.frame, None]
@@ -174,10 +207,10 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
             frame_infos = [frame_info for frame_info in video_dict[key][1:] if frame_info[0].timestamp_utc_ms == ts]
             
             frame_info = frame_infos[0]
-            frame_tensor = get_downsampled_tensor_img(frame_info[0], dim_x, dim_y)
+            frame_tensor = get_downsampled_tensor_img(frame_info[0], pixel_per_axis)
 
             skew = anomaly.prediction.lambda_skew
-            mask_interest_np = create_mask_tensor(dim_x, dim_y, [anomaly.input], scale=False).numpy()
+            mask_interest_np = create_mask_tensor(pixel_per_axis, [anomaly.input], scale=False).numpy()
             visualizer.make_plot(frame_tensor.numpy(), mask_interest_np, np.array(anomaly.target), np.array(anomaly.prediction.mean), 
                     np.array(anomaly.prediction.variance), dist=anomaly.prediction.distance_of_target, skew_lambda=np.array(skew) if skew is not None else None)
             
@@ -188,7 +221,7 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
         store_video(video_dict[key][1:], path)
 
 
-def _find_intervals_containing_timestamp(timestamp, intervals):
+def find_intervals_containing_timestamp(timestamp, intervals):
     return [interval for interval in intervals if interval[1] <= timestamp <= interval[2]]
 
 

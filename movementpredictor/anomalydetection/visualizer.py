@@ -4,17 +4,15 @@ import matplotlib.pyplot as plt
 import cv2
 
 
-def plot_input_target_output(x, y, mu, sigma, skew=None):
-    frame_np = x[0].cpu().numpy()
+def plot_input_target_output(frame, x, y, mu, sigma, skew=None):
+    frame_np = frame.numpy()
     target = y.cpu().numpy()
 
-    mask_others_np_sin = x[1].cpu().numpy()
-    mask_others_np_cos = x[2].cpu().numpy()
     mask_others_np = np.zeros(frame_np.shape)
-    mask_others_np[(mask_others_np_sin != 0) | (mask_others_np_cos != 0)] = 1
+    mask_others_np[x[2].cpu().numpy() != 0] = 1
 
-    mask_interest_np_sin = x[3].cpu().numpy()
-    mask_interest_np_cos = x[4].cpu().numpy()
+    mask_interest_np_sin = x[-2].cpu().numpy()
+    mask_interest_np_cos = x[-1].cpu().numpy()
     mask_interest_np = np.zeros(frame_np.shape)
     mask_interest_np[(mask_interest_np_sin != 0) | (mask_interest_np_cos != 0)] = 1
         
@@ -58,31 +56,6 @@ def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None
 
     if skew_lambda is None:
         plot_gaussian_variance(plt.gca(), frame_rgb, mu, sigma)
-        '''
-        eigenvalues, eigenvectors = np.linalg.eigh(sigma*frame_np.shape[-1]*0.1)  # add factor for better visualization
-        order = eigenvalues.argsort()[::-1]
-        eigenvalues = eigenvalues[order]
-        eigenvectors = eigenvectors[:, order]
-
-        major_axis_length = 2 * np.sqrt(eigenvalues[0])  
-        minor_axis_length = 2 * np.sqrt(eigenvalues[1]) 
-        angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0])) 
-
-        circle = [round(mu[0]*frame_np.shape[-1]), round(mu[1]*frame_np.shape[-2])]
-        cv2.circle(frame_rgb, circle, radius=2, color=(255, 0, 0), thickness=-1)
-        
-        cv2.ellipse(
-            frame_rgb,
-            center=circle,
-            axes=(int(major_axis_length), int(minor_axis_length)),
-            angle=angle,
-            startAngle=0,
-            endAngle=360,
-            color=(255, 0, 0),
-            thickness=1
-        )
-        '''
-
     else:
         plot_skewed_mahalanobis_points(plt.gca(), frame_rgb, mu, sigma, skew_lambda)
 
@@ -93,7 +66,7 @@ def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None
     plt.axis('off')
 
 
-def plot_gaussian_variance(ax, frame_rgb, mu, sigma, scale_factor=0.005, num_points=100):
+def plot_gaussian_variance(ax, frame_rgb, mu, sigma, scale_factor=1, num_points=100):
     """Plottet die symmetrische Gaussian-Varianz als Punktwolke."""
     
     height, width, _ = frame_rgb.shape

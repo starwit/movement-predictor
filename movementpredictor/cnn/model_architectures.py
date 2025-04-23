@@ -1,21 +1,117 @@
+import sys
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.models as models
+import logging
+
+log = logging.getLogger(__name__)
 
 
-class CNNBaseProbabilistic(nn.Module):
-    def __init__(self, input_channels=5):
-        super(CNNBaseProbabilistic, self).__init__()
+def get_model(architecture, output_prob, path_model=None):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # CNN: Feature Extraction
+    if output_prob == "symmetric":
+        model = SymmetricProb(architecture=architecture)
+    elif output_prob == "asymmetric":
+        model = AsymmetricProb(architecture=architecture)
+    else:
+        log.error(f"{output_prob} is not a known ouput distribution setting. Is has to be 'symmetric' or 'asymmetric'")
+        exit(1)
+
+    if path_model is not None:
+        weights = torch.load(path_model + "/model_weights.pth", map_location=device) 
+        model.load_state_dict(weights, strict=True)
+
+    model.to(device)
+    return model
+
+
+def regularization_term(sigma, y_true, slope, intercept):
+    trace_sigma = torch.einsum("bii->b", sigma) 
+    y = y_true[:, 1]
+    scaling_factor = slope*y + intercept     # slope*y + intercept = width + height bounding box  ->  higher scaling factor for smaller bbox (cars further away)
+    max_val = torch.max(scaling_factor).detach()
+    scaling_factor = (max_val - scaling_factor)/max_val + 0.1
+    return scaling_factor*torch.log1p(trace_sigma)
+
+
+def adapt_resnet18(input_channels):
+    backbone = models.resnet18() 
+
+    old_conv = backbone.conv1
+    new_conv = nn.Conv2d(input_channels, old_conv.out_channels, 
+                         kernel_size=old_conv.kernel_size,
+                         stride=old_conv.stride, 
+                         padding=old_conv.padding, 
+                         bias=old_conv.bias)
+    
+    backbone.conv1 = new_conv
+    backbone_output_dim = backbone.fc.in_features
+    backbone.fc = nn.Identity()
+
+    return backbone, backbone_output_dim
+
+
+def adapt_mobilenet_v3(input_channels):
+    backbone = models.mobilenet_v3_small(pretrained=True)
+
+    old_conv = backbone.features[0][0]
+    new_conv = nn.Conv2d(input_channels, old_conv.out_channels,
+                         kernel_size=old_conv.kernel_size,
+                         stride=old_conv.stride,
+                         padding=old_conv.padding,
+                         bias=old_conv.bias)
+    
+    backbone.features[0][0] = new_conv
+    backbone_output_dim = backbone.classifier[3].in_features
+    backbone.classifier = nn.Identity()
+
+    return backbone, backbone_output_dim
+
+
+class SimpleCNNBackbone(nn.Module):
+    def __init__(self, input_channels):
+        super(SimpleCNNBackbone, self).__init__()
+
         self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=5, stride=2, padding=2)  # -> 60x60
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)  # -> 30x30
         self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1)  # -> 15x15
         self.conv4 = nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1)  # -> 8x8
         self.conv5 = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1)  # -> 4x4
 
-        self.fc1 = nn.Linear(512 * 4 * 4, 256)  # Flattened Features
-        self.fc2 = nn.Linear(256, 64)
+    def forward(self, x):
+        """feature extraction base"""
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
+        x = F.relu(self.conv5(x))
+        return x
+
+
+class BaseProbabilistic(nn.Module):
+
+    def __init__(self, input_channels=5, architecture="SimpleCNN"):
+        super(BaseProbabilistic, self).__init__()
+
+        input_channels += 2     # coordinates channels
+
+        if architecture=="ResNet18":
+            self.backbone, backbone_output_dim = adapt_resnet18(input_channels)
+
+        elif architecture=="MobileNet_v3":
+            self.backbone, backbone_output_dim = adapt_mobilenet_v3(input_channels)
+        
+        elif architecture=="SimpleCNN":
+            self.backbone = SimpleCNNBackbone(input_channels)
+            backbone_output_dim = 512 * 4 * 4
+        
+        else: 
+            log.error("architecture " + architecture + " does not exist!")
+
+        self.fc = nn.Linear(backbone_output_dim, 64) 
+        #self.fc2 = nn.Linear(256, 64)
 
         # output layer (distribution parameter)
         self.mean_layer = nn.Linear(64, 2)  # µ_x, µ_y
@@ -24,15 +120,12 @@ class CNNBaseProbabilistic(nn.Module):
 
     def forward_features(self, x):
         """feature extraction base"""
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
-        x = F.relu(self.conv4(x))
-        x = F.relu(self.conv5(x))
+        x = BaseProbabilistic.add_coord_channels(x)
 
+        x = self.backbone(x)
         x = x.view(x.size(0), -1)  # Flatten
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc(x))
+        #x = F.relu(self.fc2(x))
         return x
 
     def forward_common_outputs(self, x):
@@ -47,11 +140,18 @@ class CNNBaseProbabilistic(nn.Module):
 
         sigma = torch.stack([var_x, cov_xy, cov_xy, var_y], dim=1).view(-1, 2, 2)
         return mean, sigma
+    
+    @staticmethod
+    def add_coord_channels(img_tensor):  # img_tensor: [B, C, H, W]
+        B, C, H, W = img_tensor.shape
+        y_coords = torch.linspace(-1, 1, steps=H, device=img_tensor.device).view(1, 1, H, 1).expand(B, 1, H, W)
+        x_coords = torch.linspace(-1, 1, steps=W, device=img_tensor.device).view(1, 1, 1, W).expand(B, 1, H, W)
+        return torch.cat([img_tensor, x_coords, y_coords], dim=1)  # [B, C+2, H, W]
 
 
-class CNN_symmetric_prob(CNNBaseProbabilistic):
-    def __init__(self, input_channels=5):
-        super().__init__(input_channels)
+class SymmetricProb(BaseProbabilistic):
+    def __init__(self, input_channels=5, architecture="SimpleCNN"):
+        super().__init__(input_channels, architecture)
 
     def forward(self, x):
         x = self.forward_features(x)
@@ -70,7 +170,7 @@ class CNN_symmetric_prob(CNNBaseProbabilistic):
         return mahalanobis, sigma_stable
     
     @staticmethod
-    def loss(y_true, prediction):
+    def loss(y_true, prediction, slope, intercept):
         """
         Negative Log-Likelihood (NLL) Loss with regularization
         
@@ -82,26 +182,23 @@ class CNN_symmetric_prob(CNNBaseProbabilistic):
             torch.Tensor: mean nll-loss of whole batch.
         """
         epsilon = 1e-6  
-        mahalanobis, sigma_stable = CNN_symmetric_prob.mahalanobis_distance(y_true, prediction, epsilon) 
-        trace_sigma = torch.einsum("bii->b", sigma_stable) 
-        mahalanobis_scaled = mahalanobis * (trace_sigma + epsilon)
-        #TODO: + trace anstatt * trace ausprobieren!!!!!
-
-        loss = mahalanobis_scaled.squeeze() 
+        mahalanobis, sigma_stable = SymmetricProb.mahalanobis_distance(y_true, prediction, epsilon) 
+        loss = mahalanobis.squeeze() + regularization_term(sigma_stable, y_true, slope, intercept)
 
         return loss.mean()
 
 
-class CNN_asymmetric_prob(CNNBaseProbabilistic):
-    def __init__(self, input_channels=5):
-        super().__init__(input_channels)
+
+class AsymmetricProb(BaseProbabilistic):
+    def __init__(self, input_channels=5, architecture="SimpleCNN"):
+        super().__init__(input_channels, architecture)
         # additional layer for asymmetry
         self.skew_layer = nn.Linear(64, 2)  # λ_x, λ_y
 
     def forward(self, x):
         x = self.forward_features(x)
         mean, sigma = self.forward_common_outputs(x)
-        skew_lambda = torch.tanh(self.skew_layer(x)) * 0.2  # Skewing ∈ (-0.2,0.2)
+        skew_lambda = torch.tanh(self.skew_layer(x)) * 0.5  # Skewing ∈ (-0.5,0.5)
         return mean, sigma, skew_lambda
     
     @staticmethod
@@ -125,7 +222,7 @@ class CNN_asymmetric_prob(CNNBaseProbabilistic):
 
     @staticmethod
     #https://pmc.ncbi.nlm.nih.gov/articles/PMC7615262/pdf/tmi-li-3231730.pdf
-    def loss(y_true, prediction):
+    def loss(y_true, prediction, slope, intercept):
         """
         Skewed Negative Log-Likelihood (NLL) Loss with regularization
         
@@ -137,10 +234,9 @@ class CNN_asymmetric_prob(CNNBaseProbabilistic):
             torch.Tensor: mean nll-loss of whole batch.
         """
         epsilon = 1e-6  
-        skewed_mahalanobis, sigma_stable = CNN_asymmetric_prob.mahalanobis_distance(y_true, prediction, epsilon)
+        skewed_mahalanobis, sigma_stable = AsymmetricProb.mahalanobis_distance(y_true, prediction, epsilon)
         loss = skewed_mahalanobis.squeeze() 
-
-        trace_sigma = torch.einsum("bii->b", sigma_stable) 
-        loss = loss + torch.log1p(trace_sigma)
+        loss = loss + + regularization_term(sigma_stable, y_true, slope, intercept)
 
         return loss.mean()
+    

@@ -1,6 +1,3 @@
-import sys
-sys.path.append('/home/starwit01/workspaces/hanna/movement-predictor')
-
 from movementpredictor.cnn import training
 from movementpredictor.config import ModelConfig
 
@@ -12,7 +9,7 @@ config = ModelConfig()
 
 def main():
     
-    model, history = training.trainAndStoreCNN(config.path_store_data, config.path_model, config.name_model)
+    model, history = training.trainAndStoreCNN(config.path_store_data, config.path_model, config.model_architecture, config.output_distribution, config.pixel_per_axis) 
     training.store_parameters(history, config)
 
     training.plot_loss_curve(history, config.path_plots)

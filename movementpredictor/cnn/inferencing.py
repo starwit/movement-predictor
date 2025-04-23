@@ -49,15 +49,6 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
             target = target.to(device)
             prediction = model(x)
 
-            #if len(output) == 2:
-             #   mu_batch, cov_batch = output
-                #mu_batch, cov_batch = mu_batch.cpu(), cov_batch.cpu()
-            #elif len(output) == 3:
-             #   mu_batch, cov_batch, lambda_skew_batch = output
-                #mu_batch, cov_batch, lambda_skew_batch = mu_batch.cpu(), cov_batch.cpu(), lambda_skew_batch.cpu()
-            
-            #target = target.cpu()
-
             ModelArchitecure = type(model)
             mahalanobis, _ = ModelArchitecure.mahalanobis_distance(target, prediction)
             mahalanobis = torch.sqrt(mahalanobis.squeeze())
@@ -88,7 +79,7 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
     return samples_with_stats
 
 
-def visualValidation(model, dataloader, path_plots, num_plots=100) -> None:
+def visualValidation(model, dataloader, frame, path_plots, num_plots=100) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     with torch.no_grad():
@@ -100,7 +91,7 @@ def visualValidation(model, dataloader, path_plots, num_plots=100) -> None:
             mu = prediction[0][0].detach().cpu().numpy()
             sigma = prediction[1][0].detach().cpu().numpy()
             skew = prediction[-1][0].detach().cpu().numpy() if len(prediction) == 3 else None
-            visualizer.plot_input_target_output(x[0], target[0], mu, sigma, skew)
+            visualizer.plot_input_target_output(frame, x[0], target[0], mu, sigma, skew)
 
             path = os.path.join(path_plots, "outputAE" + str(count) + ".png")
             plt.savefig(path)
