@@ -152,8 +152,10 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# repo specific -> no data and model weights
+# repo specific -> no data, model weights and anomalies
 *.saedump       
 datasets/
+predictions/
+label_box/
 *.pth 
 *.json

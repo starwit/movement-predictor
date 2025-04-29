@@ -66,33 +66,15 @@ def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], frame_ra
     return torch_dataloader
 
 
-def store_data(tracks: dict, path_store, frame_rate, folder="test", check_if_exist=False):
-    dataset = make_input_target_pairs(tracks, frame_rate)
+def store_data(tracks: dict, path_store, frame_rate, time_diff_prediction, folder="test", name_dump=None):
+    dataset = make_input_target_pairs(tracks, frame_rate, time_diff_prediction)
 
     path = os.path.join(path_store, folder)
     os.makedirs(path, exist_ok=True)
 
     # basic file name
-    base_filename = "dataset"
+    base_filename = "dataset" if name_dump is None else name_dump
     filename = f"{base_filename}.pkl"
-
-    if check_if_exist:
-        existing_files = os.listdir(path)
-        existing_indices = []
-
-        # find existing dataset.pkl, dataset1.pkl, dataset2.pkl ...
-        for f in existing_files:
-            if f.startswith(base_filename) and f.endswith(".pkl"):
-                try:
-                    # extract index, e.g. dataset1.pkl → 1
-                    name_part = f[len(base_filename):-4]  # everything between "dataset" and ".pkl"
-                    index = int(name_part) if name_part else 0
-                    existing_indices.append(index)
-                except ValueError:
-                    continue
-
-        next_index = (max(existing_indices) + 1) if existing_indices else 0
-        filename = f"{base_filename}{'' if next_index == 0 else next_index}.pkl"
 
     full_path = os.path.join(path, filename)
 
@@ -100,9 +82,9 @@ def store_data(tracks: dict, path_store, frame_rate, folder="test", check_if_exi
         pickle.dump(dataset, f)
 
 
-def make_input_target_pairs(tracks: dict, frame_rate: float) -> Dataset:
-    time_interval_in_millisec = 1100
-    prediction_step = 1000
+def make_input_target_pairs(tracks: dict, frame_rate: float, time_diff_prediction: float) -> Dataset:
+    time_interval_in_millisec = 1100*time_diff_prediction
+    prediction_step = 1000*time_diff_prediction
     input_target_pairs = []
 
     estimated_frames = round((time_interval_in_millisec / 1000) * frame_rate)
@@ -113,17 +95,28 @@ def make_input_target_pairs(tracks: dict, frame_rate: float) -> Dataset:
         
         cars = [input_tr.class_id == 2 for input_tr in trajectory]
         if sum(cars) / len(cars) > 0.8:      # only examine vehicles that are at least 80% classified as a car -> high probability of actually being a car
+            
             for i, input_tr in enumerate(trajectory):
                 if i + estimated_frames >= len(trajectory):
                     break
+
+                if not input_tr.clear_detection:
+                    continue
+
                 ts_slice = trajectory[i: i + estimated_frames]
-                duration = ts_slice[-1].capture_ts - input_tr.capture_ts
+                ts_slice_smooth = [t for t in ts_slice if t.clear_detection]
+
+                if len(ts_slice_smooth) < 0.8*estimated_frames:
+                    continue
+
+                duration = ts_slice_smooth[-1].capture_ts - input_tr.capture_ts
 
                 # make sure the object is detected in at least 80% of the frames
                 if duration*0.8 <=  time_interval_in_millisec:
-                    input_target_pairs.append([input_tr, get_position_after_time(ts_slice, prediction_step)])
+                    input_target_pairs.append([input_tr, get_position_after_time(ts_slice_smooth, prediction_step)])
     
     timestamp_dict = defaultdict(list)
+    
     for _, trajectory in tracks.items():
         for track in trajectory:
             timestamp_dict[track.capture_ts].append(track)
@@ -131,11 +124,11 @@ def make_input_target_pairs(tracks: dict, frame_rate: float) -> Dataset:
     for i, (inp, tar) in tqdm(enumerate(input_target_pairs), desc="creating dataset - collecting all bboxs"):
         other_vehicles = timestamp_dict[inp.capture_ts]
         bboxs = [vehicle.bbox for vehicle in other_vehicles]
-        speeds = [vehicle.movement_speed for vehicle in other_vehicles]
+        #speeds = [vehicle.movement_speed for vehicle in other_vehicles]
         angles = [vehicle.movement_angle for vehicle in other_vehicles]
 
         bboxs_other = np.array(bboxs, dtype=np.float32)
-        speeds_other = np.array(speeds, dtype=np.float32)
+        #speeds_other = np.array(speeds, dtype=np.float32)
         angles_other = np.array(angles, dtype=np.float32)
         input_bbox = np.array(inp.bbox, dtype=np.float32)
         target_pos = np.array(tar, dtype=np.float32)
@@ -143,7 +136,8 @@ def make_input_target_pairs(tracks: dict, frame_rate: float) -> Dataset:
         obj_id = np.str_(inp.uuid)
         angle = np.float32(inp.movement_angle)
 
-        input_target_pairs[i] = [bboxs_other, speeds_other, angles_other, input_bbox, target_pos, frame_ts, obj_id, angle]
+        input_target_pairs[i] = [bboxs_other, #speeds_other, 
+                                 angles_other, input_bbox, target_pos, frame_ts, obj_id, angle]
     
     return input_target_pairs
 
@@ -169,11 +163,12 @@ def plotDataSamples(dataloader: DataLoader, amount: int, path: str, frame: torch
         sample, target = sample_batch[0], target_batch[0]
         frame_np = frame.numpy()
 
+        #mask_others_np = np.zeros(frame_np.shape)
+        #mask_others_np[sample[2].cpu().numpy() != 0] = 1
+        mask_others_np_sin = sample[0].cpu().numpy()
+        mask_others_np_cos = sample[1].cpu().numpy()
         mask_others_np = np.zeros(frame_np.shape)
-        #mask_others_np_sin = sample[0].cpu().numpy()
-        #mask_others_np_cos = sample[1].cpu().numpy()
-        mask_others_np[sample[2].cpu().numpy() != 0] = 1
-        #mask_others_np[(mask_others_np_sin != 0) | (mask_others_np_cos != 0)] = 1
+        mask_others_np[(mask_others_np_sin != 0) | (mask_others_np_cos != 0)] = 1
 
         mask_interest_np_sin = sample[-2].cpu().numpy()
         mask_interest_np_cos = sample[-1].cpu().numpy()
@@ -267,7 +262,7 @@ def create_mask_speed_tensor(pixel, bboxs, speeds):
 class CNNData(Dataset):
     def __init__(self, inp_tar_list, pixel_per_axis):
         (self.other_vehicles_bboxs,
-         self.other_vehicles_speeds,
+         #self.other_vehicles_speeds,
          self.other_vehicles_angles,
          self.objects_of_interest,
          self.targets,
@@ -282,7 +277,7 @@ class CNNData(Dataset):
 
     def __getitem__(self, idx):
         other_bboxs = self.other_vehicles_bboxs[idx]
-        other_speeds = self.other_vehicles_speeds[idx]
+        #other_speeds = self.other_vehicles_speeds[idx]
         other_angles = self.other_vehicles_angles[idx]
         obj_bbox = self.objects_of_interest[idx]
         obj_angle = self.angles[idx]
@@ -291,10 +286,11 @@ class CNNData(Dataset):
         obj_id = self.ids[idx]
 
         mask_tensor_others_angle = create_mask_angle_tensor(self.pixel_per_axis, other_bboxs, angles=other_angles)
-        mask_tensor_others_speed = create_mask_speed_tensor(self.pixel_per_axis, other_bboxs, speeds=other_speeds)
+       # mask_tensor_others_speed = create_mask_speed_tensor(self.pixel_per_axis, other_bboxs, speeds=other_speeds)
         mask_tensor_interest = create_mask_angle_tensor(self.pixel_per_axis, [obj_bbox], angles=[obj_angle])
 
-        model_input = torch.cat((mask_tensor_others_angle, mask_tensor_others_speed, mask_tensor_interest), dim=0).float()
+        model_input = torch.cat((mask_tensor_others_angle, #mask_tensor_others_speed, 
+                                 mask_tensor_interest), dim=0).float()
         target = torch.tensor(target, dtype=torch.float32)
 
         return model_input, target, frame_ts, obj_id

@@ -8,8 +8,12 @@ def plot_input_target_output(frame, x, y, mu, sigma, skew=None):
     frame_np = frame.numpy()
     target = y.cpu().numpy()
 
+    #mask_others_np = np.zeros(frame_np.shape)
+    #mask_others_np[x[2].cpu().numpy() != 0] = 1
+    mask_others_np_sin = x[0].cpu().numpy()
+    mask_others_np_cos = x[1].cpu().numpy()
     mask_others_np = np.zeros(frame_np.shape)
-    mask_others_np[x[2].cpu().numpy() != 0] = 1
+    mask_others_np[(mask_others_np_sin != 0) | (mask_others_np_cos != 0)] = 1
 
     mask_interest_np_sin = x[-2].cpu().numpy()
     mask_interest_np_cos = x[-1].cpu().numpy()

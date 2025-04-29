@@ -59,6 +59,7 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
             elif len(prediction) == 3:
                 mu_batch, cov_batch, lambda_skew_batch = prediction
                 lambda_skew_batch = lambda_skew_batch.cpu().numpy()
+                lambda_skew_batch.reshape((-1, 2))
 
             mu_batch, cov_batch, mahalanobis, target = mu_batch.cpu().numpy(), cov_batch.cpu().numpy(), mahalanobis.cpu().numpy(), target.cpu().numpy()
             mu_batch, cov_batch, mahalanobis, target = mu_batch.reshape((-1, 2)), cov_batch.reshape((-1, 2, 2)), mahalanobis.reshape((-1, 1)), target.reshape((-1, 2))

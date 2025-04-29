@@ -11,8 +11,11 @@ config = ModelConfig()
 
 def main():
     # get background_fame only for visualization - it is not needed for the model 
-    background_frame = datamanagement.get_background_frame(config.path_sae_data, config.pixel_per_axis)
+    background_frame = datamanagement.get_background_frame(config.path_sae_data_train, config.pixel_per_axis)
     datamanagement.store_frame(background_frame, config.path_store_data)
+
+    name_sae_dump =  os.path.basename(config.path_sae_data_test)
+    filename_without_extension, _ = os.path.splitext(name_sae_dump)
 
     trackManager = datamanagement.TrackingDataManager()
 
@@ -21,9 +24,9 @@ def main():
     #trackedObjects = DataFilterer().apply_filtering(trackedObjects)
     #dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate, "train")
 
-    trackedObjects = trackManager.getTrackedBaseData(config.path_sae_data, inferencing=False)
+    trackedObjects = trackManager.getTrackedBaseData(config.path_sae_data_train, inferencing=False)
     trackedObjects = DataFilterer().apply_filtering(trackedObjects)
-    dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate, "train")
+    dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate, "train", name_dump=filename_without_extension)
 
     # test data
     #trackedObjects = trackManager.getTrackedBaseData(config.path_sae_data, inferencing=True, split=True)
