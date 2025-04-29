@@ -9,10 +9,13 @@ from scipy.signal import medfilt
 
 
 class DataFilterer():
+
     log = logging.getLogger(__name__)
     min_movement = 0.05
     min_length = 7
     time_window_movement = 10000        # 10s
+    max_angle_change = 60
+
 
     def apply_filtering(self, tracking_list: list[TrackedObjectPosition]) -> Dict[str, list[TrackedObjectPosition]]:
         """
@@ -32,6 +35,7 @@ class DataFilterer():
 
         return mapping
     
+    
     def only_smoothing(self, tracking_list: list[TrackedObjectPosition]) -> Dict[str, list[TrackedObjectPosition]]:
         """
         Smoothes trajectories without previous filtering. Should only be used for small tests not when performing the real anomaly detection!
@@ -46,6 +50,7 @@ class DataFilterer():
         mapping = self._smooth_trajectories_add_movement_info(mapping)
 
         return mapping
+    
 
     def _smooth_trajectories_add_movement_info(self, mapping):
         new_mapping = {}
@@ -62,11 +67,12 @@ class DataFilterer():
                 track.bbox = bbox
                 track.center = center
 
-            DataFilterer._calculate_movement_angle(tracks_of_object)
-            DataFilterer._calculate_movement_speed(tracks_of_object)
+            self._calculate_movement_angle(tracks_of_object)
+            #DataFilterer._calculate_movement_speed(tracks_of_object)
             new_mapping[key] = tracks_of_object
             
         return new_mapping
+    
     
     def _extract_vehicles_with_movement(self, mapping):
         self.log.info("filter out parts without movement")
@@ -103,6 +109,69 @@ class DataFilterer():
             new_mapping[key] = filtered_traj
         
         return new_mapping
+    
+
+    def _calculate_movement_angle(self, tracks_of_object: list[TrackedObjectPosition]):
+        i = 0
+        while i < len(tracks_of_object) - 4:
+            tracks = tracks_of_object[i:i+5]
+
+            change1 = DataFilterer._get_angle_diff(tracks[3], tracks[2], tracks[1])
+            change2 = DataFilterer._get_angle_diff(tracks[4], tracks[2], tracks[0])
+            change3 = DataFilterer._get_angle_diff(tracks[4], tracks[2], tracks[1])
+            change4 = DataFilterer._get_angle_diff(tracks[3], tracks[2], tracks[0])
+
+            if all(change < self.max_angle_change for change in [change1, change2, change3, change4]):
+                tracks_of_object[i+2].clear_detection = True
+                if i == 0:
+                    tracks_of_object[0].clear_detection = True
+                    tracks_of_object[1].clear_detection = True
+                if i == len(tracks_of_object) - 5:
+                    tracks_of_object[-1].clear_detection = True
+                    tracks_of_object[-2].clear_detection = True
+                i += 1
+            else:
+                i += 3
+        
+        for i in range(len(tracks_of_object) - 6):
+            tracks = tracks_of_object[i:i+7]
+            tracks = [t for t in tracks if t.clear_detection]
+            angle = None
+
+            if (len(tracks) < 2 or np.linalg.norm(np.array(tracks[-1].center) - np.array(tracks[0].center)) < 0.015) and i > 0:
+                angle = tracks_of_object[i-1].movement_angle
+
+            elif len(tracks) >= 2:   
+                angle = DataFilterer._calculate_smooth_angle(tracks)
+
+            if angle is None:
+                    angle = DataFilterer._calculate_smooth_angle(tracks_of_object[i:i+7])
+
+            tracks_of_object[i+3].movement_angle = angle
+
+            if i == 0:
+                for j in range(3):
+                    tracks_of_object[i + j].movement_angle = angle
+            if i == len(tracks_of_object) - 7:
+                for j in range(4, 7):
+                    tracks_of_object[i + j].movement_angle = angle
+
+    
+    @staticmethod
+    def _calculate_smooth_angle(tracks):
+        x = np.array([track.center[0] for track in tracks]).reshape(-1, 1)
+        y = np.array([track.center[1] for track in tracks]).ravel()
+
+        model = TheilSenRegressor()
+        model.fit(x, y)
+        slope = model.coef_[0]
+        intercept = model.intercept_
+
+        point1 = [x[0], slope * x[0] + intercept]
+        point2 = [x[-1], slope * x[-1] + intercept]
+
+        return DataFilterer._get_angle(point2, point1)
+
 
     @staticmethod
     def _map_tracks_to_id(tracking_list: list[TrackedObjectPosition]):
@@ -120,13 +189,12 @@ class DataFilterer():
     @staticmethod
     def _smooth_trajectory_median(bboxes, kernel_size=7):
         bboxes = np.array(bboxes)
-        # Eckpunkte extrahieren
+
         x_min = bboxes[:, 0, 0]
         y_min = bboxes[:, 0, 1]
         x_max = bboxes[:, 1, 0]
         y_max = bboxes[:, 1, 1]
 
-        # Median-Filter auf alle Koordinaten anwenden
         x_min_smooth = medfilt(x_min, kernel_size)
         y_min_smooth = medfilt(y_min, kernel_size)
         x_max_smooth = medfilt(x_max, kernel_size)
@@ -137,7 +205,6 @@ class DataFilterer():
         y_min[kernel_size//2:-kernel_size//2] = y_min_smooth[kernel_size//2:-kernel_size//2]
         y_max[kernel_size//2:-kernel_size//2] = y_max_smooth[kernel_size//2:-kernel_size//2]
 
-        # Neue Bounding Boxes zusammensetzen
         smoothed_bboxes = np.stack([
             np.stack([x_min, y_min], axis=1),
             np.stack([x_max, y_max], axis=1)
@@ -165,40 +232,13 @@ class DataFilterer():
             if i == len(tracks_of_object)-2:
                 tracks_of_object[-1].movement_speed = speed
 
-
+    
     @staticmethod
-    def _calculate_movement_angle(tracks_of_object: list[TrackedObjectPosition]):
-
-        for i in range(len(tracks_of_object) - 6):
-            tracks = tracks_of_object[i:i+7]
-            x = np.array([track.center[0] for track in tracks]).reshape(-1, 1)
-            y = np.array([track.center[1] for track in tracks]).ravel()
-
-            if np.linalg.norm(np.array(tracks[-1].center) - np.array(tracks[0].center)) < 0.015 and i > 0:
-                angle = tracks_of_object[i-1].movement_angle
-
-            else:
-                model = TheilSenRegressor()
-                model.fit(x, y)
-                slope = model.coef_[0]
-                intercept = model.intercept_
-
-                point1 = [x[0], slope * x[0] + intercept]
-                point2 = [x[-1], slope * x[-1] + intercept]
-
-                angle = DataFilterer._get_angle(point2, point1)
-
-            tracks_of_object[i+3].movement_angle = angle
-
-            if i == 0:
-                tracks_of_object[i].movement_angle = angle
-                tracks_of_object[i+1].movement_angle = angle
-                tracks_of_object[i+2].movement_angle = angle
-                
-            if i == len(tracks_of_object) - 7:
-                tracks_of_object[i+4].movement_angle = angle
-                tracks_of_object[i+5].movement_angle = angle
-                tracks_of_object[i+6].movement_angle = angle
+    def _get_angle_diff(track: TrackedObjectPosition, prev_track: TrackedObjectPosition, prev_prev_track: TrackedObjectPosition) -> float:
+        angle1 = DataFilterer._get_angle(track.center, prev_track.center)
+        angle2 = DataFilterer._get_angle(prev_track.center, prev_prev_track.center)
+        diff = abs(angle2 - angle1)
+        return min(diff, 360 - diff)
     
 
     @staticmethod

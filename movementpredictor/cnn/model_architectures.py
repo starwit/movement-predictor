@@ -1,4 +1,4 @@
-import sys
+import timm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -54,7 +54,7 @@ def adapt_resnet18(input_channels):
 
 
 def adapt_mobilenet_v3(input_channels):
-    backbone = models.mobilenet_v3_small(pretrained=True)
+    backbone = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.IMAGENET1K_V1)
 
     old_conv = backbone.features[0][0]
     new_conv = nn.Conv2d(input_channels, old_conv.out_channels,
@@ -64,8 +64,24 @@ def adapt_mobilenet_v3(input_channels):
                          bias=old_conv.bias)
     
     backbone.features[0][0] = new_conv
-    backbone_output_dim = backbone.classifier[3].in_features
+    backbone_output_dim = backbone.classifier[0].in_features
     backbone.classifier = nn.Identity()
+
+    return backbone, backbone_output_dim
+
+
+def adapt_swin_transformer(input_channels):
+    backbone = models.swin_t(weights=models.Swin_T_Weights.IMAGENET1K_V1)
+
+    old_conv = backbone.features[0][0]  
+    new_conv = nn.Conv2d(input_channels, old_conv.out_channels,
+                         kernel_size=old_conv.kernel_size,
+                         stride=old_conv.stride,
+                         padding=old_conv.padding)
+
+    backbone.features[0][0] = new_conv
+    backbone_output_dim = backbone.head.in_features
+    backbone.head = nn.Identity()
 
     return backbone, backbone_output_dim
 
@@ -92,39 +108,46 @@ class SimpleCNNBackbone(nn.Module):
 
 class BaseProbabilistic(nn.Module):
 
-    def __init__(self, input_channels=5, architecture="SimpleCNN"):
+    def __init__(self, input_channels=4, architecture="SimpleCNN"):
         super(BaseProbabilistic, self).__init__()
 
-        input_channels += 2     # coordinates channels
+        #if coord_channels:
+         #   input_channels += 2     # coordinates channels
+        #self.coord_channels = coord_channels
+        self.architecture = architecture
 
         if architecture=="ResNet18":
-            self.backbone, backbone_output_dim = adapt_resnet18(input_channels)
+            self.backbone, self.backbone_output_dim = adapt_resnet18(input_channels)
 
         elif architecture=="MobileNet_v3":
-            self.backbone, backbone_output_dim = adapt_mobilenet_v3(input_channels)
+            self.backbone, self.backbone_output_dim = adapt_mobilenet_v3(input_channels)
+        
+        elif architecture =="SwinTransformer":
+            self.backbone, self.backbone_output_dim = adapt_swin_transformer(input_channels)
         
         elif architecture=="SimpleCNN":
             self.backbone = SimpleCNNBackbone(input_channels)
-            backbone_output_dim = 512 * 4 * 4
+            self.backbone_output_dim = 512 * 4 * 4
         
         else: 
             log.error("architecture " + architecture + " does not exist!")
 
-        self.fc = nn.Linear(backbone_output_dim, 64) 
+        #self.fc = nn.Linear(backbone_output_dim, 64) 
         #self.fc2 = nn.Linear(256, 64)
 
         # output layer (distribution parameter)
-        self.mean_layer = nn.Linear(64, 2)  # µ_x, µ_y
-        self.log_var_layer = nn.Linear(64, 2)  # log(σ_x²), log(σ_y²)
-        self.corr_layer = nn.Linear(64, 1)  # tanh(ρ)
+        self.mean_layer = nn.Linear(self.backbone_output_dim, 2)  # µ_x, µ_y
+        self.log_var_layer = nn.Linear(self.backbone_output_dim, 2)  # log(σ_x²), log(σ_y²)
+        self.corr_layer = nn.Linear(self.backbone_output_dim, 1)  # tanh(ρ)
 
     def forward_features(self, x):
         """feature extraction base"""
-        x = BaseProbabilistic.add_coord_channels(x)
+        #if self.coord_channels:
+         #   x = BaseProbabilistic.add_coord_channels(x)
 
         x = self.backbone(x)
         x = x.view(x.size(0), -1)  # Flatten
-        x = F.relu(self.fc(x))
+        #x = F.relu(self.fc(x))
         #x = F.relu(self.fc2(x))
         return x
 
@@ -141,16 +164,16 @@ class BaseProbabilistic(nn.Module):
         sigma = torch.stack([var_x, cov_xy, cov_xy, var_y], dim=1).view(-1, 2, 2)
         return mean, sigma
     
-    @staticmethod
-    def add_coord_channels(img_tensor):  # img_tensor: [B, C, H, W]
-        B, C, H, W = img_tensor.shape
-        y_coords = torch.linspace(-1, 1, steps=H, device=img_tensor.device).view(1, 1, H, 1).expand(B, 1, H, W)
-        x_coords = torch.linspace(-1, 1, steps=W, device=img_tensor.device).view(1, 1, 1, W).expand(B, 1, H, W)
-        return torch.cat([img_tensor, x_coords, y_coords], dim=1)  # [B, C+2, H, W]
+    #@staticmethod
+    #def add_coord_channels(img_tensor):  # img_tensor: [B, C, H, W]
+     #   B, C, H, W = img_tensor.shape
+      #  y_coords = torch.linspace(-1, 1, steps=H, device=img_tensor.device).view(1, 1, H, 1).expand(B, 1, H, W)
+       # x_coords = torch.linspace(-1, 1, steps=W, device=img_tensor.device).view(1, 1, 1, W).expand(B, 1, H, W)
+        #return torch.cat([img_tensor, x_coords, y_coords], dim=1)  # [B, C+2, H, W]
 
 
 class SymmetricProb(BaseProbabilistic):
-    def __init__(self, input_channels=5, architecture="SimpleCNN"):
+    def __init__(self, input_channels=4, architecture="SimpleCNN"):
         super().__init__(input_channels, architecture)
 
     def forward(self, x):
@@ -190,10 +213,10 @@ class SymmetricProb(BaseProbabilistic):
 
 
 class AsymmetricProb(BaseProbabilistic):
-    def __init__(self, input_channels=5, architecture="SimpleCNN"):
+    def __init__(self, input_channels=4, architecture="SimpleCNN"):
         super().__init__(input_channels, architecture)
         # additional layer for asymmetry
-        self.skew_layer = nn.Linear(64, 2)  # λ_x, λ_y
+        self.skew_layer = nn.Linear(self.backbone_output_dim, 2)  # λ_x, λ_y
 
     def forward(self, x):
         x = self.forward_features(x)

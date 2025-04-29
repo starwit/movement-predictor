@@ -33,10 +33,10 @@ def main():
 
     dist_thr = anomaly_detector.calculate_and_visualize_threshold(samples_with_stats, config.path_plots, config.percentage_anomaly)
     anomaly_detector.store_parameter(config.path_model, dist_thr, config.percentage_anomaly)
-    anomaly_detector.plot_unlikely_samples(samples_with_stats, frame, test, dist_thr, config.path_plots)
+    #anomaly_detector.plot_unlikely_samples(samples_with_stats, frame, test, dist_thr, config.path_plots)
 
     anomalies = anomaly_detector.get_meaningful_unlikely_samples(samples_with_stats, dist_thr)
-    anomaly_detector.anomalies_with_video(anomalies, config.path_sae_data, config.pixel_per_axis, config.path_plots)
+    anomaly_detector.anomalies_with_video(anomalies, config.path_sae_data_test, config.pixel_per_axis, config.path_plots)
 
     return
     clustering_vectors, normalization_paras = clusterer.get_clustering_vectors(anomaly_inputs, anomaly_targets, anomaly_mus, anomaly_probs)
