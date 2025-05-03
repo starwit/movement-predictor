@@ -59,9 +59,7 @@ class DataFilterer():
                 continue
 
             bboxes = [track.bbox for track in tracks_of_object]
-            #timestamps = [track.capture_ts for track in tracks_of_object]
             smooth_bboxes, smooth_centers = DataFilterer._smooth_trajectory_median(bboxes)#, timestamps)
-            #smooth_bboxes, smooth_centers = DataFilterer._smooth_trajectory_median_(bboxes, timestamps)
 
             for track, bbox, center in zip(tracks_of_object, smooth_bboxes, smooth_centers):
                 track.bbox = bbox

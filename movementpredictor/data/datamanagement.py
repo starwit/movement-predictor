@@ -113,51 +113,6 @@ class TrackingDataManager:
             print(f"Error processing the file: {e}")
             return None
 
-    def getTrackedBaseData_(self, path, inferencing=True, split=False) -> list[TrackedObjectPosition]:
-        try:
-            extracted_tracks = [] 
-            with open(path, 'r') as input_file:
-
-                messages = saedump.message_splitter(input_file)
-
-                start_message = next(messages)
-                dump_meta = saedump.DumpMeta.model_validate_json(start_message)
-                log.info(f'Starting playback from file {path} containing streams {dump_meta.recorded_streams}')
-                
-                '''don't pick the data in their order because one dataset might only contain images at night -> inequal distributions'''
-                for count, message in tqdm(enumerate(messages)):
-
-                    #if count > 1000:
-                     #   break
-                    event = saedump.Event.model_validate_json(message)
-                    proto_bytes = pybase64.standard_b64decode(event.data_b64)
-
-                    proto = SaeMessage()
-                    proto.ParseFromString(proto_bytes)
-
-                    if self.frame_rate is None:
-                        if self.start_timestamp is None:
-                            self.start_timestamp = proto.frame.timestamp_utc_ms
-                        else:
-                            diff = proto.frame.timestamp_utc_ms - self.start_timestamp
-                            self.frame_rate = 1000/diff
-
-                    if split:
-                        time_diff = proto.frame.timestamp_utc_ms - self.start_timestamp 
-                        one_hour = 3600000
-                        training_data = time_diff % (2*one_hour) < one_hour       # sort out 1/2 of the data for the training data set
-                        if (inferencing and training_data) or (not inferencing and not training_data):
-                            continue
-                    
-                    extracted_tracks = self.extract_tracked_objects(proto, extracted_tracks, inferencing)
-
-            return extracted_tracks
-
-        except Exception as e:
-
-            print(f"Error processing the file: {e}")
-            return None
-        
 
     def extract_tracked_objects(self, proto, extracted_tracks=[], inferencing=True):
         if self.border_threshold is None:

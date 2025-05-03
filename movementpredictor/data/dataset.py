@@ -1,6 +1,6 @@
 from typing import Dict
 import torch
-from torch.utils.data import DataLoader, Dataset, random_split, Sampler
+from torch.utils.data import DataLoader, Dataset, random_split
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
@@ -10,7 +10,6 @@ import os
 from collections import defaultdict
 import pickle
 import math
-import random
 from movementpredictor.data.datamanagement import TrackedObjectPosition
 
 
@@ -46,7 +45,7 @@ def getTorchDataLoader(dataset, shuffle=True):
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=False)
 
 
-def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], frame_rate) -> DataLoader:
+def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], time_diff_prediction, frame_rate) -> DataLoader:
     """
     Creates a pytorch DataLoader to make the data progressible for pytorch deep learning models.
     Based on the tracking information the model's input (boundingboxes, movement_angles) 
@@ -60,7 +59,7 @@ def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], frame_ra
         DataLoader: pytorch Dataloader to make easy use of the dataset in batches
 
     """
-    raw_dataset = make_input_target_pairs(tracks, frame_rate)
+    raw_dataset = make_input_target_pairs(tracks, frame_rate, time_diff_prediction)
     torch_dataset = CNNData(raw_dataset)
     torch_dataloader = getTorchDataLoader(torch_dataset, shuffle=False)
     return torch_dataloader
@@ -205,7 +204,8 @@ def plotDataSamples(dataloader: DataLoader, amount: int, path: str, frame: torch
         plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
         plt.axis('off')
 
-        plt.savefig(os.path.join(path, "exampleInput" + str(count) + ".png"))
+        parent_path = os.path.dirname(path)
+        plt.savefig(os.path.join(parent_path, "exampleInput" + str(count) + ".png"))
         plt.close()
 
 

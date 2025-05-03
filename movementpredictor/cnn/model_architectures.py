@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 import logging
+import os
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +20,12 @@ def get_model(architecture, output_prob, path_model=None):
         exit(1)
 
     if path_model is not None:
-        weights = torch.load(path_model + "/model_weights.pth", map_location=device) 
+        if path_model.endswith(".pth") and os.path.isfile(path_model):
+            weight_path = path_model
+        else:
+            weight_path = os.path.join(path_model, "model_weights.pth")
+
+        weights = torch.load(weight_path, map_location=device)
         model.load_state_dict(weights, strict=True)
 
     model.to(device)
@@ -220,7 +226,7 @@ class AsymmetricProb(BaseProbabilistic):
     def forward(self, x):
         x = self.forward_features(x)
         mean, sigma = self.forward_common_outputs(x)
-        skew_lambda = torch.tanh(self.skew_layer(x)) * 0.5  # Skewing ∈ (-0.5,0.5)
+        skew_lambda = torch.tanh(self.skew_layer(x))  # Skewing ∈ (-1, 1)
         return mean, sigma, skew_lambda
     
     @staticmethod

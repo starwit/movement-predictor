@@ -23,17 +23,27 @@ from visionlib import saedump
 log = logging.getLogger(__name__)
 
 
-def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.InferenceResult], path_plots, percentage_p=99.9, path=None):
+def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.InferenceResult], path_plots, percentage_p=None, num_anomalous_trajectories=None, path=None):
     """
     computes threshold so that 'percentage_p' percent of object IDs (trajectories) are considered normal.
     """
+    if percentage_p is None and num_anomalous_trajectories is None:
+        log.error("both, percentage_p and num_anomalous_trajectories are None. You have to specify one.")
+        exit(1)
+    elif percentage_p is not None and num_anomalous_trajectories is not None:
+        log.warning("both, percentage_p and num_anomalous_trajectories are specified. You should specify only one. percentage_p will be used now.")
 
     dist_obj_pairs = [(sample.prediction.distance_of_target, sample.obj_id) for sample in samples_with_stats]
     dist_obj_pairs.sort(reverse=True, key=lambda x: x[0])
 
     total_obj_ids = set(sample.obj_id for sample in samples_with_stats)
     num_obj_ids_total = len(total_obj_ids)
-    num_obj_ids_target = int(np.ceil((100 - percentage_p) / 100 * num_obj_ids_total))
+    if num_anomalous_trajectories is not None and num_anomalous_trajectories > num_obj_ids_total:
+        log.error("you want more anomalous trajectories than total trajectories are provided: total trajectories = " + 
+                  str(num_obj_ids_total) + ", num_anomalous_trajectories = " + str(num_anomalous_trajectories))
+        exit(1)
+        
+    num_obj_ids_target = int(np.ceil((100 - percentage_p) / 100 * num_obj_ids_total)) if percentage_p else num_anomalous_trajectories
 
     seen_obj_ids = set()
     threshold_dists = None
