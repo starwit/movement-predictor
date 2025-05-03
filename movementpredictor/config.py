@@ -19,7 +19,7 @@ class ModelConfig:
         self.path_store_data = os.path.join("movementpredictor/data/datasets", self.camera, self.name_data)
         os.makedirs(self.path_store_data, exist_ok=True)
 
-        self.model_architecture = os.getenv("MODEL_ARCHITECTURE", "CNN")      
+        self.model_architecture = os.getenv("MODEL_ARCHITECTURE", "MobileNet_v3")      
         self.output_distribution = os.getenv("OUTPUT_DISTR", "symmetric")
         self.name_model = self.model_architecture + "_" + self.output_distribution + "_prob"
         self.path_model = os.path.join("models", self.camera, self.name_data, self.name_model)

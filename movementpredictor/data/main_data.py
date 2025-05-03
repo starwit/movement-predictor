@@ -18,20 +18,10 @@ def main():
     filename_without_extension, _ = os.path.splitext(name_sae_dump)
 
     trackManager = datamanagement.TrackingDataManager()
-
-    # train data
-    #trackedObjects = trackManager.getTrackedBaseData(config.path_sae_data, inferencing=False, split=True)
-    #trackedObjects = DataFilterer().apply_filtering(trackedObjects)
-    #dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate, "train")
-
     trackedObjects = trackManager.getTrackedBaseData(config.path_sae_data_train, inferencing=False)
     trackedObjects = DataFilterer().apply_filtering(trackedObjects)
-    dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate, "train", name_dump=filename_without_extension)
-
-    # test data
-    #trackedObjects = trackManager.getTrackedBaseData(config.path_sae_data, inferencing=True, split=True)
-    #trackedObjects = DataFilterer().apply_filtering(trackedObjects) 
-    #dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate, "test")
+    print(trackManager.frame_rate)
+    dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate, config.time_diff_prediction, "train", name_dump=filename_without_extension)
 
     # visualization
     train_ds = dataset.getTorchDataSet(os.path.join(config.path_store_data, "train"), pixel_per_axis=config.pixel_per_axis)

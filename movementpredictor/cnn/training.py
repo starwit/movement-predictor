@@ -103,7 +103,7 @@ def train_model(path_data, path_model, architecture, output_prob, pixel_per_axis
             if save_model:
               torch.save(best_model_wts, path_model + "/model_weights.pth")
           else: 
-            print("no significant improvement")
+            print("no improvement")
             no_improvement += 1
 
           if no_improvement > 4: 
@@ -214,11 +214,10 @@ def store_parameters(history, config: ModelConfig):
       "model_name": config.name_model,
       "model_architecture": config.model_architecture,
       "output_distribution": config.output_distribution,
-      "training_data": os.path.basename(config.path_sae_data),
+      "training_data": os.path.basename(config.path_sae_data_train),
       "pixel_per_axis": config.pixel_per_axis,
       "time_diff_prediction": config.time_diff_prediction,
       "learning_rate": history["lr"],
-      "sceduler_factor": history["sceduler_factor"]
     }
    
    with open(config.path_model + "/parameters.json", "w") as json_file:

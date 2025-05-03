@@ -17,7 +17,7 @@ def objective(trial):
     #coord_channels = trial.suggest_categorical("use_coord_channels", [True, False])
 
     model, history = train_model(config.path_store_data, config.path_model, config.model_architecture, config.output_distribution, config.pixel_per_axis,
-                                lr=lr)#, scheduler_factor=scheduler_factor) #coord_channels=coord_channels)
+                                lr=lr, save_model=False)#, scheduler_factor=scheduler_factor) #coord_channels=coord_channels)
     
     trial.set_user_attr("train_loss_per_epoch", history["train"])
     trial.set_user_attr("val_loss_per_epoch",   history["val"])

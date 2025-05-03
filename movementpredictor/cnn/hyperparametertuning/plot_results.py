@@ -44,8 +44,7 @@ for i, entry in enumerate(results):
 
 study = optuna.study.create_study(direction="minimize")
 study.add_trials(trials)
-
-outlier_threshold = np.percentile([t.value for t in study.trials], 90)  # 90% Quantil
+outlier_threshold = np.percentile([t.value for t in study.trials], 100)  # 90% Quantil
 filtered_trials = [t for t in study.trials if t.value <= outlier_threshold]
 filtered_study = optuna.create_study(direction="minimize")
 filtered_study.add_trials(filtered_trials)
@@ -60,7 +59,7 @@ for i, trial in enumerate(sorted_by_val[:3]):
 
 
 #optuna.visualization.plot_param_importances(study).show()
-optuna.visualization.plot_parallel_coordinate(filtered_study).show()
+#optuna.visualization.plot_parallel_coordinate(filtered_study).show()
 optuna.visualization.plot_slice(filtered_study).show()
 #optuna.visualization.plot_optimization_history(study).show()
 
