@@ -28,7 +28,7 @@ def setup_training(path_data, pixel_per_axis, architecture, output_prob, lr):
     model = model.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.25, patience=2, verbose=True, min_lr=lr * (0.25**2))
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.3, patience=2, verbose=True, min_lr=lr * 0.3)
 
     train_ds = dataset.getTorchDataSet(os.path.join(path_data, "train"), pixel_per_axis)
     slope, intercept = camera_angle.calculate_camera_angle(train_ds, pixel_per_axis)
@@ -65,7 +65,7 @@ def train_model(path_data, path_model, architecture, output_prob, pixel_per_axis
     model, optimizer, scheduler, train_loader, val_loader, slope, intercept, device = setup_training(
         path_data, pixel_per_axis, architecture, output_prob, lr
     )
-
+    
     history = dict(train=[], val=[])
     history["lr"] = lr
 

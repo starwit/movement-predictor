@@ -23,7 +23,7 @@ from visionlib import saedump
 log = logging.getLogger(__name__)
 
 
-def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.InferenceResult], path_plots, percentage_p=None, num_anomalous_trajectories=None, path=None):
+def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.InferenceResult], path_plots, percentage_p=None, num_anomalous_trajectories=None):
     """
     computes threshold so that 'percentage_p' percent of object IDs (trajectories) are considered normal.
     """
@@ -63,7 +63,8 @@ def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.Infer
     plt.ylabel('amount')
     plt.axvline(x=threshold_dists, color='black', linestyle='dashed', label='threshold')
 
-    path = os.path.join(path_plots, "distances.png") if path is None else path
+    os.makedirs(path_plots, exist_ok=True)
+    path = os.path.join(path_plots, "distances.png")
     plt.savefig(path)
     plt.show()
     plt.clf()

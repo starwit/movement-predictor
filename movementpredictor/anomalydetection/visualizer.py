@@ -2,6 +2,8 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+import torch
+from movementpredictor.cnn.model_architectures import AsymmetricProb
 
 
 def plot_input_target_output(frame, x, y, mu, sigma, skew=None):
@@ -103,38 +105,50 @@ def plot_gaussian_variance(ax, frame_rgb, mu, sigma, scale_factor=1, num_points=
     ax.axis('off')
 
 
+def find_point_on_loss_contour(mu_np, sigma_np, skew_lambda_np, direction, loss_target=0.2, max_iter=30):
+    mu = torch.tensor(mu_np, dtype=torch.float32)
+    sigma = torch.tensor(sigma_np, dtype=torch.float32)
+    skew_lambda = torch.tensor(skew_lambda_np, dtype=torch.float32)
+
+    s_min, s_max = 0.0, 1.0
+    direction = direction / np.linalg.norm(direction)
+
+    for _ in range(max_iter):
+        s_mid = (s_min + s_max) / 2
+        y = mu + s_mid * torch.tensor(direction, dtype=torch.float32)
+        loss_val, _ = AsymmetricProb.mahalanobis_distance(
+            y.unsqueeze(0),
+            (mu.unsqueeze(0), sigma.unsqueeze(0), skew_lambda.unsqueeze(0))
+        )
+        if abs(loss_val.item() - loss_target) < 1e-4:
+            break
+        if loss_val.item() > loss_target:
+            s_max = s_mid
+        else:
+            s_min = s_mid
+
+    return (mu + s_mid * torch.tensor(direction, dtype=torch.float32)).numpy()
+
+
 def plot_skewed_mahalanobis_points(ax, frame_rgb, mu, sigma, skew_lambda, scale_factor=0.2, num_points=100):
     """Plottet Punkte mit gleicher skewed Mahalanobis-Distanz um den Mean."""
     
     height, width, _ = frame_rgb.shape
     angles = np.linspace(0, 2 * np.pi, num_points)
-    
-    # generate points on unit circle and skew based on skewing parameter
-    circle_x = np.cos(angles)
-    circle_y = np.sin(angles)
-    skew_factor_x = np.exp(-np.sign(circle_x) * skew_lambda[0])
-    skew_factor_y = np.exp(-np.sign(circle_y) * skew_lambda[1])
-    circle_x *= skew_factor_x
-    circle_y *= skew_factor_y
+    directions = np.stack([np.cos(angles), np.sin(angles)], axis=1)
 
-    circle = np.stack([circle_x, circle_y], axis=1)
+    points = []
 
-    eigvals, eigvecs = np.linalg.eigh(sigma * scale_factor)
-    transformed_points = circle @ np.sqrt(np.diag(eigvals)) @ eigvecs.T  
+    for dir_vec in directions:
+        pt = find_point_on_loss_contour(mu, sigma, skew_lambda, dir_vec, loss_target=scale_factor)
+        pt_scaled = [pt[0] * width, pt[1] * height]
+        points.append(pt_scaled)
     
-    # calculate skew factor: negative input because the circle points here are not the error but rather the opposite (allowed errors): vairance is larger in places of larger allowed error
-    #skew_factors = np.exp(-np.sign(transformed_points) * skew_lambda)
-    
-    #scaled_points = transformed_points * skew_factors 
-    #points = mu + scaled_points   
-    points = mu + transformed_points
-
-    points[:, 0] *= width
-    points[:, 1] *= height
+    points = np.array(points)
     mu_scaled = (mu[0] * width, mu[1] * height)
 
     ax.imshow(cv2.cvtColor(frame_rgb, cv2.COLOR_BGR2RGB))
-    ax.scatter(points[:, 0], points[:, 1], c='cyan', s=5, label="Skewed Variance Points")
+    ax.plot(points[:, 0], points[:, 1], color="cyan", linewidth=2, label="Skewed Variance Points")
     ax.scatter(mu_scaled[0], mu_scaled[1], color='red', marker='o', s=100, label="Mean")
 
     ax.legend()
