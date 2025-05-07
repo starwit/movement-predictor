@@ -223,30 +223,29 @@ class AsymmetricProb(BaseProbabilistic):
         # additional layer for asymmetry
         self.skew_layer = nn.Linear(self.backbone_output_dim, 2)  # λ_x, λ_y
 
+    def softsign(x):
+        return x / (1 + x.abs())
+
     def forward(self, x):
         x = self.forward_features(x)
         mean, sigma = self.forward_common_outputs(x)
-        skew_lambda = torch.tanh(self.skew_layer(x))  # Skewing ∈ (-1, 1)
+        skew_lambda = torch.tanh(self.skew_layer(x))  * 0.3                           #torch.tanh(self.skew_layer(x)) * 0.3 # Skewing ∈ (-1, 1)
         return mean, sigma, skew_lambda
     
-    @staticmethod
     def mahalanobis_distance(y_true, prediction, epsilon=1e-6):
         mu, sigma, skew_lambda = prediction
-        error = (y_true - mu).unsqueeze(2)  # Shape (batch_size, 2, 1)
-        
-        sigma_stable = sigma + epsilon * torch.eye(sigma.size(-1)).to(sigma.device) 
+        error = (y_true - mu)  
+
+        sigma_stable = sigma + epsilon * torch.eye(2, device=sigma.device)
         sigma_inv = torch.inverse(sigma_stable)
-        mahalanobis = torch.bmm(torch.bmm(error.transpose(1, 2), sigma_inv), error)
 
-        error = error.squeeze(2)
+        skew_factor = torch.exp(torch.sign(error) * skew_lambda)  # (B, 2)
+        error_skewed = error * skew_factor  # (B, 2)
 
-        s_x = torch.exp(torch.sign(error[:, 0]) * skew_lambda[:, 0])
-        s_y = torch.exp(torch.sign(error[:, 1]) * skew_lambda[:, 1])
+        err = error_skewed.unsqueeze(1)  # (B,1,2)
+        maha = torch.bmm(torch.bmm(err, sigma_inv), err.transpose(1, 2))
 
-        skew_factor = torch.stack([s_x, s_y], dim=1)
-        skewed_mahalanobis = mahalanobis * skew_factor.sum(dim=1, keepdim=True).unsqueeze(-1)
-
-        return skewed_mahalanobis, sigma_stable
+        return maha, sigma_stable
 
     @staticmethod
     #https://pmc.ncbi.nlm.nih.gov/articles/PMC7615262/pdf/tmi-li-3231730.pdf
@@ -264,7 +263,9 @@ class AsymmetricProb(BaseProbabilistic):
         epsilon = 1e-6  
         skewed_mahalanobis, sigma_stable = AsymmetricProb.mahalanobis_distance(y_true, prediction, epsilon)
         loss = skewed_mahalanobis.squeeze() 
-        loss = loss + + regularization_term(sigma_stable, y_true, slope, intercept)
+        skew_penalty = (prediction[-1] ** 2).mean()
+        loss = loss + regularization_term(sigma_stable, y_true, slope, intercept) + 0.01 * skew_penalty
 
         return loss.mean()
+    
     

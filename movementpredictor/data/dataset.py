@@ -16,14 +16,16 @@ from movementpredictor.data.datamanagement import TrackedObjectPosition
 log = logging.getLogger(__name__)
 
 
-def getTorchDataSet(path_store, pixel_per_axis, val_split=False):
-    pkl_files = [f for f in os.listdir(path_store) if f.endswith(".pkl")]
+def getTorchDataSet(path_store, pixel_per_axis=120, val_split=False):
     all_data = []
 
+    if os.path.isfile(path_store) and path_store.endswith(".pkl"):
+        pkl_files = [path_store]
+    else:
+        pkl_files = [os.path.join(path_store, f) for f in os.listdir(path_store) if f.endswith(".pkl")]
+
     for file in pkl_files:
-        file_path = os.path.join(path_store, file)
-        
-        with open(file_path, "rb") as f:
+        with open(file, "rb") as f:
             data = pickle.load(f)  
             all_data.append(data)  
 
