@@ -12,7 +12,7 @@ class EvalConfig:
         self.path_test_data = os.getenv("PATH_TEST_DATA")
         streamname = os.path.splitext(os.path.basename(self.path_test_data))[0]
         self.path_label_box = os.getenv("PATH_LABEL_BOX")
-        self.path_sae_dumps = os.getenv("PATH_SAE_DUMPS", "").split(",")
+        self.path_sae_dump = os.getenv("PATH_SAE_DUMP", "")
         self.num_anomalies = float(os.getenv("NUM_ANOMALIES"))
         self.camera = os.getenv("CAMERA")
 

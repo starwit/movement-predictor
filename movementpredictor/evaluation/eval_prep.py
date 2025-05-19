@@ -5,8 +5,8 @@ import sys
 from typing import List
 sys.path.append('/home/starwit01/workspaces/hanna/movement-predictor')
 
-from movementpredictor.cnn import inferencing, model_architectures
-from movementpredictor.cnn.inferencing import inference_with_stats
+from movementpredictor.cnn import model_architectures
+from movementpredictor.cnn.inferencing import inference_with_stats, InferenceResult
 from movementpredictor.anomalydetection import anomaly_detector
 from movementpredictor.data import dataset
 from movementpredictor.evaluation.eval_config import EvalConfig
@@ -17,9 +17,9 @@ log = logging.getLogger(__name__)
 evalconfig = EvalConfig()
 
 
-def store_predictions(predicted_anomalies: List[inferencing.InferenceResult], path_folder, model_path, num_anomalies, thr_dist):
+def store_predictions(predicted_anomalies: List[InferenceResult], path_folder, model_path, num_anomalies, thr_dist=None):
     model_name = make_combined_name(model_path)
-    path_prediction_json = os.path.join(path_folder, model_name + ".json")
+    path_prediction_json = os.path.join(path_folder, model_name + ".json") if thr_dist is not None else os.path.join(path_folder, model_name + "_all_labeled_data.json") 
     os.makedirs(path_folder, exist_ok=True)
     anomaly_dict = defaultdict(list)
 
@@ -36,12 +36,18 @@ def store_predictions(predicted_anomalies: List[inferencing.InferenceResult], pa
 
         predictions[obj_id] = {"distances" : distances, "timestamps": timestamps}
 
-    data = {
-        "model_name": model_name,
-        "num_anomalies": num_anomalies,
-        "threshold_distances": thr_dist,
-        "predictions": predictions
-    }
+    if thr_dist is not None:
+        data = {
+            "model_name": model_name,
+            "num_anomalies": num_anomalies,
+            "threshold_distances": thr_dist,
+            "predictions": predictions
+        }
+    else:
+        data = {
+            "model_name": model_name,
+            "predictions": predictions
+        }
 
     with open(path_prediction_json, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=4)

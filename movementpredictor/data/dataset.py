@@ -16,7 +16,7 @@ from movementpredictor.data.datamanagement import TrackedObjectPosition
 log = logging.getLogger(__name__)
 
 
-def getTorchDataSet(path_store, pixel_per_axis=120, val_split=False):
+def getTorchDataSet(path_store, pixel_per_axis=120, val_split=False, ids_of_interest=None):
     all_data = []
 
     if os.path.isfile(path_store) and path_store.endswith(".pkl"):
@@ -30,6 +30,9 @@ def getTorchDataSet(path_store, pixel_per_axis=120, val_split=False):
             all_data.append(data)  
 
     raw_dataset = [item for data_list in all_data for item in data_list]
+    if ids_of_interest is not None:
+        raw_dataset = [item for item in raw_dataset if item[-2] in ids_of_interest]
+
     torch_dataset = CNNData(raw_dataset, pixel_per_axis)
 
     if val_split:
