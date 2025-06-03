@@ -1,13 +1,9 @@
-import sys
-sys.path.append('/home/starwit01/workspaces/hanna/movement-predictor')
-
 from movementpredictor.evaluation.eval_config import EvalConfig
 from movementpredictor.anomalydetection.anomaly_detector import find_intervals_containing_timestamp
 from movementpredictor.anomalydetection.video_generation import store_video
 
 import os
 import cv2
-import torch
 from pathlib import Path
 from collections import defaultdict
 from typing import Dict, List
@@ -25,12 +21,14 @@ log = logging.getLogger(__name__)
 evalconfig = EvalConfig()
 
 
-
 def extract_predictions(path_stored_predictions: str):
     predictions_folder = Path(path_stored_predictions)
     predictions = []
 
     for json_file in predictions_folder.glob("*.json"):
+        if json_file.name.endswith("100.json"):
+            continue
+
         with open(json_file, 'r', encoding='utf-8') as f:
             try:
                 anomaly_predictions = json.load(f)
@@ -83,9 +81,9 @@ def store_for_labelling(predicted_anomalies: Dict[str, Dict[str, List]], camera:
 
         #not_stored_already[obj_id] = predicted_anomalies[obj_id]
         not_stored_already[obj_id] = [int(min_ts), int(max_ts)]
-    
-    if len(not_stored_already) > 0:
-        create_video(not_stored_already, path_sae_dump, path_label_storing)
+
+    # return intervals; video creation deferred to main
+    return not_stored_already
 
 
 def create_video(anomaly_dict: Dict[str, List[int]], path_sae_dump: str, path_store: str):
@@ -169,14 +167,30 @@ def get_downsampled_pil_img(frame, pixel=224):
 
 
 def main():
-    # get predictions from stored prediction data
+
     predictions = extract_predictions(evalconfig.path_store_anomalies)
 
-    # store videos for labelling
-    for i, predictions_per_method in enumerate(predictions):
-        log.info(f"start video creation {i} of {len(predictions)}")
-        store_for_labelling(predictions_per_method, evalconfig.camera, evalconfig.path_label_box, evalconfig.path_sae_dump)
+    all_intervals = {}
+    for i, preds in enumerate(predictions):
 
+        log.info(f"processing predictions {i+1}/{len(predictions)}")
+        new_intervals = store_for_labelling(
+            preds,
+            evalconfig.camera,
+            evalconfig.path_label_box,
+            evalconfig.path_sae_dump
+        )
+
+        for obj_id, (min_ts, max_ts) in new_intervals.items():
+            if obj_id in all_intervals:
+                all_intervals[obj_id][0] = min(all_intervals[obj_id][0], min_ts)
+                all_intervals[obj_id][1] = max(all_intervals[obj_id][1], max_ts)
+            else:
+                all_intervals[obj_id] = [min_ts, max_ts]
+
+    if all_intervals:
+        path_label_store = os.path.join(evalconfig.path_label_box, evalconfig.camera)
+        create_video(all_intervals, evalconfig.path_sae_dump, path_label_store)
 
 if __name__ == "__main__":
     main()

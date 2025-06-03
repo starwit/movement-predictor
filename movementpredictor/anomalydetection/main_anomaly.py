@@ -31,11 +31,12 @@ def main():
     #return
     samples_with_stats = inference_with_stats(model, test)
 
-    dist_thr = anomaly_detector.calculate_and_visualize_threshold(samples_with_stats, config.path_plots, config.percentage_anomaly)
+    dist_thr, anomaly_ids = anomaly_detector.calculate_and_visualize_threshold(samples_with_stats, config.path_plots, config.percentage_anomaly)
     anomaly_detector.store_parameter(config.path_model, dist_thr, config.percentage_anomaly)
     #anomaly_detector.plot_unlikely_samples(samples_with_stats, frame, test, dist_thr, config.path_plots)
-
-    anomalies = anomaly_detector.get_meaningful_unlikely_samples(samples_with_stats, dist_thr)
+    
+    anomalies = anomaly_detector.get_unlikely_samples(samples_with_stats, dist_thr, anomaly_ids)
+    #anomalies = anomaly_detector.get_meaningful_unlikely_samples(samples_with_stats, dist_thr)
     anomaly_detector.anomalies_with_video(anomalies, config.path_sae_data_test, config.pixel_per_axis, config.path_plots)
 
     return

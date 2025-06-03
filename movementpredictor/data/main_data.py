@@ -14,13 +14,12 @@ def main():
     background_frame = datamanagement.get_background_frame(config.path_sae_data_train, config.pixel_per_axis)
     datamanagement.store_frame(background_frame, config.path_store_data)
 
-    name_sae_dump =  os.path.basename(config.path_sae_data_test)
+    name_sae_dump =  os.path.basename(config.path_sae_data_train)
     filename_without_extension, _ = os.path.splitext(name_sae_dump)
 
     trackManager = datamanagement.TrackingDataManager()
     trackedObjects = trackManager.getTrackedBaseData(config.path_sae_data_train, inferencing=False)
     trackedObjects = DataFilterer().apply_filtering(trackedObjects)
-    print(trackManager.frame_rate)
     dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate, config.time_diff_prediction, "train", name_dump=filename_without_extension)
 
     # visualization

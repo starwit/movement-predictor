@@ -37,7 +37,6 @@ def get_downsampled_tensor_img(frame, pixel):
 
 
 def get_background_frame(path, pixel):
-        # TODO: choose frame with least amount of detections and good quality
         try:
             tensor_img = None
 
