@@ -17,8 +17,8 @@ log = logging.getLogger(__name__)
 evalconfig = EvalConfig()
 
 
-def store_predictions(predicted_anomalies: List[InferenceResult], path_folder, model_path, num_anomalies, thr_dist=None):
-    model_name = make_combined_name(model_path)
+def store_predictions(predicted_anomalies: List[InferenceResult], path_folder, model_path, num_anomalies, num_anomal_frames_per_trajectory="3", thr_dist=None):
+    model_name = make_combined_name(model_path, num_anomal_frames_per_trajectory)
     path_prediction_json = os.path.join(path_folder, model_name + ".json") if thr_dist is not None else os.path.join(path_folder, model_name + "_all_labeled_data.json") 
     os.makedirs(path_folder, exist_ok=True)
     anomaly_dict = defaultdict(list)
@@ -53,11 +53,11 @@ def store_predictions(predicted_anomalies: List[InferenceResult], path_folder, m
         json.dump(data, file, indent=4)
 
 
-def make_combined_name(path: str) -> str:
+def make_combined_name(path: str, num_frames) -> str:
     folder = os.path.basename(os.path.dirname(path))
     parent_folder = os.path.basename(os.path.dirname(os.path.dirname(path)))
     filename_without_ext = os.path.splitext(os.path.basename(path))[0]
-    return f"{parent_folder}_{folder}_{filename_without_ext}"
+    return f"{parent_folder}_{folder}_{filename_without_ext}_len{num_frames}"
 
 
 def main():
@@ -70,12 +70,13 @@ def main():
     samples_with_stats = inference_with_stats(model, test)
     print("total test samples: ", len(samples_with_stats))
 
-    path_store = os.path.join("movementpredictor/evaluation/plots", evalconfig.camera, "distances_labeling_" + make_combined_name(evalconfig.path_model))
-    dist_thr = anomaly_detector.calculate_and_visualize_threshold(samples_with_stats, path_store, num_anomalous_trajectories=evalconfig.num_anomalies)
-
-    predicted_anomalies = anomaly_detector.get_unlikely_samples(samples_with_stats, dist_thr)
-    print("num anomalous tracks: ", len(predicted_anomalies))
-    store_predictions(predicted_anomalies, evalconfig.path_store_anomalies, evalconfig.path_model, evalconfig.num_anomalies, dist_thr)
+    for anomaly_length in [1, 2, 5, 10, 20, 50]:
+        path_store = os.path.join("movementpredictor/evaluation/plots", evalconfig.camera, "distances_labeling_" + make_combined_name(evalconfig.path_model, anomaly_length))
+        dist_thr, anomaly_obj_ids = anomaly_detector.calculate_and_visualize_threshold(samples_with_stats, path_store, 
+                                                                                       num_anomalous_trajectories=evalconfig.num_anomalies, num_anomalous_frames_per_id=anomaly_length)
+        predicted_anomalies = anomaly_detector.get_unlikely_samples(samples_with_stats, dist_thr, anomaly_obj_ids)
+        print("num anomalous tracks: ", len(predicted_anomalies))
+        store_predictions(predicted_anomalies, evalconfig.path_store_anomalies, evalconfig.path_model, evalconfig.num_anomalies, anomaly_length, dist_thr)
 
 
 if __name__ == "__main__":

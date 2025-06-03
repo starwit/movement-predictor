@@ -116,9 +116,6 @@ class BaseProbabilistic(nn.Module):
     def __init__(self, input_channels=4, architecture="SimpleCNN"):
         super(BaseProbabilistic, self).__init__()
 
-        #if coord_channels:
-         #   input_channels += 2     # coordinates channels
-        #self.coord_channels = coord_channels
         self.architecture = architecture
 
         if architecture=="ResNet18":
@@ -137,23 +134,14 @@ class BaseProbabilistic(nn.Module):
         else: 
             log.error("architecture " + architecture + " does not exist!")
 
-        #self.fc = nn.Linear(backbone_output_dim, 64) 
-        #self.fc2 = nn.Linear(256, 64)
-
-        # output layer (distribution parameter)
         self.mean_layer = nn.Linear(self.backbone_output_dim, 2)  # µ_x, µ_y
         self.log_var_layer = nn.Linear(self.backbone_output_dim, 2)  # log(σ_x²), log(σ_y²)
         self.corr_layer = nn.Linear(self.backbone_output_dim, 1)  # tanh(ρ)
 
     def forward_features(self, x):
         """feature extraction base"""
-        #if self.coord_channels:
-         #   x = BaseProbabilistic.add_coord_channels(x)
-
         x = self.backbone(x)
         x = x.view(x.size(0), -1)  # Flatten
-        #x = F.relu(self.fc(x))
-        #x = F.relu(self.fc2(x))
         return x
 
     def forward_common_outputs(self, x):
@@ -168,13 +156,6 @@ class BaseProbabilistic(nn.Module):
 
         sigma = torch.stack([var_x, cov_xy, cov_xy, var_y], dim=1).view(-1, 2, 2)
         return mean, sigma
-    
-    #@staticmethod
-    #def add_coord_channels(img_tensor):  # img_tensor: [B, C, H, W]
-     #   B, C, H, W = img_tensor.shape
-      #  y_coords = torch.linspace(-1, 1, steps=H, device=img_tensor.device).view(1, 1, H, 1).expand(B, 1, H, W)
-       # x_coords = torch.linspace(-1, 1, steps=W, device=img_tensor.device).view(1, 1, 1, W).expand(B, 1, H, W)
-        #return torch.cat([img_tensor, x_coords, y_coords], dim=1)  # [B, C+2, H, W]
 
 
 class SymmetricProb(BaseProbabilistic):
@@ -267,5 +248,3 @@ class AsymmetricProb(BaseProbabilistic):
         loss = loss + regularization_term(sigma_stable, y_true, slope, intercept) + 0.01 * skew_penalty
 
         return loss.mean()
-    
-    
