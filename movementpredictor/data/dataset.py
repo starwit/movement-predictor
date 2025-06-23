@@ -65,6 +65,8 @@ def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], time_dif
 
     """
     raw_dataset = make_input_target_pairs(tracks, frame_rate, time_diff_prediction)
+    if len(raw_dataset) == 0:
+        return None
     torch_dataset = CNNData(raw_dataset, pixel_per_axis)
     torch_dataloader = getTorchDataLoader(torch_dataset, shuffle=False)
     return torch_dataloader
