@@ -50,7 +50,7 @@ def getTorchDataLoader(dataset, shuffle=True):
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=False)
 
 
-def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], time_diff_prediction=2, frame_rate=10) -> DataLoader:
+def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], time_diff_prediction=2, frame_rate=10, pixel_per_axis=120) -> DataLoader:
     """
     Creates a pytorch DataLoader to make the data progressible for pytorch deep learning models.
     Based on the tracking information the model's input (boundingboxes, movement_angles) 
@@ -65,7 +65,7 @@ def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], time_dif
 
     """
     raw_dataset = make_input_target_pairs(tracks, frame_rate, time_diff_prediction)
-    torch_dataset = CNNData(raw_dataset)
+    torch_dataset = CNNData(raw_dataset, pixel_per_axis)
     torch_dataloader = getTorchDataLoader(torch_dataset, shuffle=False)
     return torch_dataloader
 
