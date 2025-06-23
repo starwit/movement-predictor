@@ -49,10 +49,12 @@ for entry in os.listdir(path_label_box):
         #with open(path_label, "w", encoding="utf-8") as json_file:
          #   json.dump(labeldata, json_file, indent=4)
 
-        if labeldata["label"] == 13:
+        if labeldata["label"] == "None":
             print(labeldata["obj_id"])
-            continue
-        
+
+        #if labeldata["time_interval"][1] - labeldata["time_interval"][0] > 5000 and (labeldata["label"] == 0 or labeldata["label"] == 2):
+         #   print(labeldata["obj_id"])
+
         #video_found = any(
          #   file.lower().endswith(".mp4") for file in os.listdir(full_path)
         #)

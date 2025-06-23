@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 from movementpredictor.evaluation.eval_config import EvalConfig
+from movementpredictor.evaluation.metrics_and_results import evaluation_helper
 from movementpredictor.evaluation.metrics_and_results.evaluation_helper import  PredictedTrajectory, find_matching_files_top_k, get_trajectories
 
 
@@ -26,6 +27,7 @@ class GroupHistogram:
         self.x_labels = []
         for k in self.key_order:
             self.x_labels.extend(sorted(groups[k], reverse=True))
+            #self.x_labels.extend(groups[k])
         self.n_bins = len(self.x_labels)
         
         self.value2group = {v: k for k, vals in groups.items() for v in vals}
@@ -89,17 +91,7 @@ class GroupHistogram:
         plt.close(fig)
 
 
-
-    def plot_per_method_and_num_points(self, trajectories: List[List[PredictedTrajectory]], name_model, num_anomaly_points):
-        """
-        label_arrays: list of 1D numpy arrays, each containing labels in x_labels universe
-        """
-        # compute histogram counts for each run
-        hists = []
-        for trs in trajectories:
-            found_labels = np.array([tr.label for tr in trs])
-            counts = [np.count_nonzero(found_labels == val) for val in self.x_labels]
-            hists.append(counts)
+    def make_plot(self, hists):
         hists = np.array(hists) 
 
         # mean and std over runs
@@ -114,8 +106,6 @@ class GroupHistogram:
         plt.xticks(x, self.x_labels, rotation='vertical')
         plt.xlabel('Label Value')
         plt.ylabel('Average Count')
-        plt.ylim(-0.5, 30.5)
-        plt.title(name_model + " with min " + str(num_anomaly_points) + " unusual points per trajectory")
 
         # legend by group
         handles = [
@@ -125,8 +115,25 @@ class GroupHistogram:
         plt.legend(handles=handles, title='Groups', bbox_to_anchor=(1.02, 1), loc='upper left')
         plt.tight_layout()
         plt.grid(axis='y')
+
+
+    def plot_per_method_and_num_points(self, trajectories: List[List[PredictedTrajectory]], name_model, num_anomaly_points):
+        """
+        label_arrays: list of 1D numpy arrays, each containing labels in x_labels universe
+        """
+        # compute histogram counts for each run
+        hists = []
+        for trs in trajectories:
+            found_labels = np.array([tr.label for tr in trs])
+            counts = [np.count_nonzero(found_labels == val) for val in self.x_labels]
+            hists.append(counts)
+
+        self.make_plot(hists)
+
         path = os.path.join("movementpredictor/evaluation/plots", evalconfig.camera)
         os.makedirs(path, exist_ok=True)
+
+        plt.title(name_model + " with min " + str(num_anomaly_points) + " unusual points per trajectory")
         plt.savefig(os.path.join(path, "historgram_" + name_model + "_" + str(num_anomaly_points) + ".png"))
         plt.close()
 
@@ -134,7 +141,7 @@ class GroupHistogram:
     def plot_all_found_anomalies(self, all_event_labels):
         hist = [np.count_nonzero(np.array(all_event_labels) == val) for val in self.x_labels]
 
-        break_threshold = 38
+        break_threshold = 58
 
         fig, (ax_upper, ax_lower) = plt.subplots(
             2, 1, figsize=(12, 6),
@@ -172,14 +179,6 @@ class GroupHistogram:
         ax_lower.set_xlabel('Label Value')
         ax_lower.set_ylabel('Count')
 
-        #outlier_idx = np.argmax(hist)
-        #outlier_val = hist[outlier_idx]
-        #ax_upper.text(
-         #   outlier_idx, outlier_val * 1.05,
-          #  f'{outlier_val:.0f}',
-           # ha='center', va='bottom'
-        #)
-
         fig.suptitle("Histogram of Event labels")
 
         # legend by group
@@ -195,5 +194,32 @@ class GroupHistogram:
         os.makedirs(path, exist_ok=True)
         plt.savefig(os.path.join(path, "histogram_total_events.png"))
         plt.close()
+
+
+    def plot_best_scoring_histogram(self, trajectories_of_all_runs: List[List[evaluation_helper.PredictedTrajectory]], weight_param: float, k=50):
+        hists = []
+
+        for trajectories in trajectories_of_all_runs:
+            trajectories_with_score = []
+
+            for trajectory in trajectories:
+                score = evaluation_helper.score_trajectory(trajectory, "exp-weighted-avg", exp_para=weight_param)
+                trajectories_with_score.append([trajectory, score])
+
+            trajectories_with_score.sort(key=lambda x: x[1], reverse=True)
+            trs = [tr[0] for tr in trajectories_with_score[:k]]
+            found_labels = np.array([tr.label for tr in trs])
+            counts = [np.count_nonzero(found_labels == val) for val in self.x_labels]
+            hists.append(counts)
+        
+        self.make_plot(hists)
+
+        path = os.path.join("movementpredictor/evaluation/plots", evalconfig.camera)
+        os.makedirs(path, exist_ok=True)
+
+        plt.title("found anomalies in top " + str(k) + " detections of best scoring method")
+        plt.savefig(os.path.join(path, "historgram_best_scoring-" + str(k) + ".png"))
+        plt.close()
+        
 
 

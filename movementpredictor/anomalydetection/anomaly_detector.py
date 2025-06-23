@@ -23,9 +23,30 @@ from visionlib import saedump
 log = logging.getLogger(__name__)
 
 
-'''
-def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.InferenceResult], path_plots, percentage_p=None, 
-                                      num_anomalous_trajectories=None, num_anomalous_frames_per_id=3, scoring_method="avg"):
+def calculate_trajectory_anomaly_scores(samples_with_stats: List[inferencing.InferenceResult], a=0.95):
+    trajectories = defaultdict(list)
+    for sample in samples_with_stats:
+        trajectories[sample.obj_id].append(sample.prediction.distance_of_target)
+
+    trajectories_with_score = []
+    for obj_id, distances in trajectories.items():
+        if len(distances) < 10:
+            continue
+        sorted_measures = np.array(sorted(distances, reverse=True))
+        score = 0
+        sum_weights = 0
+        for rank, measure in enumerate(sorted_measures):
+            weight = a**rank
+            score += measure*weight
+            sum_weights += weight
+        score = score/sum_weights
+        trajectories_with_score.append([obj_id, score])
+    
+    return trajectories_with_score
+
+
+def calculate_trajectory_threshold(samples_with_stats: List[inferencing.InferenceResult], percentage_p=None, 
+                            num_anomalous_trajectories=None):
     """
     computes threshold so that 'percentage_p' percent of object IDs (trajectories) are considered normal.
     """
@@ -35,56 +56,72 @@ def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.Infer
     elif percentage_p is not None and num_anomalous_trajectories is not None:
         log.warning("both, percentage_p and num_anomalous_trajectories are specified. You should specify only one. percentage_p will be used now.")
 
-    trajectories = defaultdict()
-    for sample in samples_with_stats:
-        trajectories[sample.obj_id].append(sample)
-
-    scoring = defaultdict(str)
-    for obj_id, trajectory in trajectories.items():
-
-        sorted_samples = sorted(trajectory, key=lambda s: s.prediction.distance_of_target, reverse=True)
-        top_samples = sorted_samples[:num_anomalous_frames_per_id]
-        top_distances = [s.prediction.distance_of_target for s in top_samples]
-
-        if scoring_method == "avg":
-            score_val = sum(top_distances) / len(top_distances)
-        else:
-            log.error("scoring method ", scoring_method, " not implemented yet")
-            exit(1)
-
-        scoring[score_val] = {"obj_id": obj_id, "samples": top_samples}
-
-
     total_obj_ids = set(sample.obj_id for sample in samples_with_stats)
     num_obj_ids_total = len(total_obj_ids)
     if num_anomalous_trajectories is not None and num_anomalous_trajectories > num_obj_ids_total:
         log.error("you want more anomalous trajectories than total trajectories are provided: total trajectories = " + 
                   str(num_obj_ids_total) + ", num_anomalous_trajectories = " + str(num_anomalous_trajectories))
         exit(1)
-    
+
+    # start caculating anomaly score for each trajectory
+    trajectories_with_score = calculate_trajectory_anomaly_scores(samples_with_stats)
+
+    # find threshold
+    trajectories_with_score.sort(key=lambda x: x[1], reverse=True)
     num_obj_ids_target = int(np.ceil((100 - percentage_p) / 100 * num_obj_ids_total)) if percentage_p else num_anomalous_trajectories
-    top_scores = sorted(scoring.keys(), reverse=True)[:num_obj_ids_target]
-    threshold_dists = top_scores[-1]
-    print(threshold_dists)
+    threshold = trajectories_with_score[num_obj_ids_target][1]
 
-    log.info("Distance-threshold: " + str(threshold_dists))
+    log.info("Exp-weighted avg threshold: " + str(threshold))
+    return threshold
 
-    plt.hist(scoring.keys(), bins=100, edgecolor='black')
+
+def visualize_distances(samples_with_stats: List[inferencing.InferenceResult], path_plots):
+    #threshold_dists, anomaly_obj_ids = calculate_threshold(samples_with_stats, percentage_p, num_anomalous_trajectories)
+    dists = [sample.prediction.distance_of_target for sample in samples_with_stats]
+
+    plt.hist(dists, bins=100, edgecolor='black')
     plt.title('distance distribution')
     plt.xlabel('dist')
     plt.ylabel('amount')
-    plt.axvline(x=threshold_dists, color='black', linestyle='dashed', label='threshold')
+    #plt.axvline(x=threshold_dists, color='black', linestyle='dashed', label='threshold')
 
     os.makedirs(path_plots, exist_ok=True)
     path = os.path.join(path_plots, "distances.png")
     plt.savefig(path)
     plt.show()
     plt.clf()
+    
+    
+def get_unlikely_trajectories(samples_with_stats: List[inferencing.InferenceResult], score_threshold) -> List[inferencing.InferenceResult]:
+    anomaly_samples: List[inferencing.InferenceResult] = []
+    trajectory_scores = calculate_trajectory_anomaly_scores(samples_with_stats)
+    score_dict = {obj_id: score for obj_id, score in trajectory_scores}
 
-    anomalies = ...
+    samples_by_trajectory = defaultdict(list)
+    for sample in samples_with_stats:
+        samples_by_trajectory[sample.obj_id].append(sample)
 
-    return threshold_dists, anomalies
-'''
+    for obj_id, samples in samples_by_trajectory.items():
+        score = score_dict.get(obj_id, 0.0)
+
+        if score >= score_threshold:
+            distances = [s.prediction.distance_of_target for s in samples]
+
+            # 1-sigma border
+            mean_dist = np.mean(distances)
+            std_dist = np.std(distances)
+            sigma_threshold = mean_dist + std_dist
+
+            for s in samples:
+                if s.prediction.distance_of_target > sigma_threshold:
+                    anomaly_samples.append(s)
+
+    #for sample in samples_with_stats:
+     #   if sample.obj_id in score_dict.keys() and score_dict[sample.obj_id] >= score_threshold:
+      #      anomaly_samples.append(sample)
+    
+    return anomaly_samples
+
 
 def calculate_threshold(samples_with_stats: List[inferencing.InferenceResult], percentage_p=None, 
                             num_anomalous_trajectories=None, num_anomalous_frames_per_id=3):
@@ -179,16 +216,6 @@ def plot_unlikely_samples(samples_with_stats, frame, test, threshold_dist, path_
                 plt.savefig(os.path.join(path, "anomaly_" + str(count) + ".png"))
                 plt.close()
 
-'''
-def get_unlikely_samples(samples_with_stats, dist_thr) -> List[inferencing.InferenceResult]:
-    anomaly_samples: List[inferencing.InferenceResult] = []
-
-    for sample in samples_with_stats:
-        if sample.prediction.distance_of_target > dist_thr:
-            anomaly_samples.append(sample)
-    
-    return anomaly_samples
-'''
 
 def get_unlikely_samples(samples_with_stats: List[inferencing.InferenceResult], dist_thr, anomaly_obj_ids) -> List[inferencing.InferenceResult]:
     anomaly_samples: List[inferencing.InferenceResult] = []
@@ -198,20 +225,6 @@ def get_unlikely_samples(samples_with_stats: List[inferencing.InferenceResult], 
             anomaly_samples.append(sample)
     
     return anomaly_samples
-
-
-def get_meaningful_unlikely_samples(sampels_with_stats, dist_thr) -> List[inferencing.InferenceResult]:
-    anomaly_samples = get_unlikely_samples(sampels_with_stats, dist_thr)
-    
-    # remove samples whose id only exists once
-    anomaly_ids = [sample.obj_id for sample in anomaly_samples]
-    id_counts = Counter(anomaly_ids)
-    ids_to_remove = {id for id, count in id_counts.items() if count == 1}
-    indices_to_remove = [index for index, id in enumerate(anomaly_ids) if id in ids_to_remove]
-
-    anomalies = [sample for index, sample in enumerate(anomaly_samples) if index not in indices_to_remove]
-
-    return anomalies
 
 
 def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_dump, pixel_per_axis, path_plots):
