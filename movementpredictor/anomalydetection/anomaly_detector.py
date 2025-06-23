@@ -23,7 +23,7 @@ from visionlib import saedump
 log = logging.getLogger(__name__)
 
 
-def calculate_trajectory_anomaly_scores(samples_with_stats: List[inferencing.InferenceResult], a=0.95):
+def calculate_trajectory_anomaly_scores(samples_with_stats: List[inferencing.InferenceResult], a=0.94):
     trajectories = defaultdict(list)
     for sample in samples_with_stats:
         trajectories[sample.obj_id].append(sample.prediction.distance_of_target)
@@ -69,9 +69,9 @@ def calculate_trajectory_threshold(samples_with_stats: List[inferencing.Inferenc
     # find threshold
     trajectories_with_score.sort(key=lambda x: x[1], reverse=True)
     num_obj_ids_target = int(np.ceil((100 - percentage_p) / 100 * num_obj_ids_total)) if percentage_p else num_anomalous_trajectories
-    threshold = trajectories_with_score[num_obj_ids_target][1]
+    threshold = trajectories_with_score[num_obj_ids_target-1][1]
 
-    log.info("Exp-weighted avg threshold: " + str(threshold))
+    print("Exp-weighted avg threshold: " + str(threshold))
     return threshold
 
 
@@ -101,24 +101,31 @@ def get_unlikely_trajectories(samples_with_stats: List[inferencing.InferenceResu
     for sample in samples_with_stats:
         samples_by_trajectory[sample.obj_id].append(sample)
 
+    selected_samples = []
+    selected_trajectories = []
     for obj_id, samples in samples_by_trajectory.items():
         score = score_dict.get(obj_id, 0.0)
-
+        
         if score >= score_threshold:
-            distances = [s.prediction.distance_of_target for s in samples]
+            selected_samples.extend(samples)
+            selected_trajectories.append((obj_id, samples))
 
-            # 1-sigma border
-            mean_dist = np.mean(distances)
-            std_dist = np.std(distances)
-            sigma_threshold = mean_dist + std_dist
+    all_distances = [s.prediction.distance_of_target for s in selected_samples]
+    mean_dist = np.mean(all_distances)
+    std_dist = np.std(all_distances)
+    # 1-sigma border
+    sigma_threshold = mean_dist + std_dist
 
-            for s in samples:
-                if s.prediction.distance_of_target > sigma_threshold:
-                    anomaly_samples.append(s)
+    for obj_id, samples in selected_trajectories:
+        over_sigma = [s for s in samples if s.prediction.distance_of_target > sigma_threshold]
 
-    #for sample in samples_with_stats:
-     #   if sample.obj_id in score_dict.keys() and score_dict[sample.obj_id] >= score_threshold:
-      #      anomaly_samples.append(sample)
+        if len(over_sigma) >= 5:
+            anomaly_samples.extend(over_sigma)
+        else:
+            # min 5 anomaly samples per anomaly trajectory
+            top_5 = sorted(samples, key=lambda s: s.prediction.distance_of_target, reverse=True)[:5]
+            anomaly_samples.extend(top_5)
+
     
     return anomaly_samples
 
