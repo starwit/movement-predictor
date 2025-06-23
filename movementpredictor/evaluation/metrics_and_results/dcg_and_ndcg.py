@@ -15,10 +15,10 @@ evalconfig = EvalConfig()
 
 
 def ndcg_curve(trajectories_of_all_runs: List[List[evaluation_helper.PredictedTrajectory]], model_name: str, all_ids: List[str], 
-              all_group_labels: List[int], scoring: str, exp_relevance = True, k=50, weight_factor=None):
+              all_group_labels: List[int], scoring: str, k=50, weight_factor=None):
     curve_mean = []
     curve_std = []
-    rels = evaluation_helper.get_rels(all_group_labels, exp_relevance)
+    rels = evaluation_helper.get_rels(all_group_labels)
 
     max_min_length = 50 if scoring == "min" or scoring == "" else 80
     max_ndcg, max_ndcg_std, min_length = 0, 0, 0
@@ -48,10 +48,10 @@ def ndcg_curve(trajectories_of_all_runs: List[List[evaluation_helper.PredictedTr
 
 
 def ndcg_curve_percentil(trajectories_of_all_runs: List[List[evaluation_helper.PredictedTrajectory]], model_name: str, all_ids: List[str], 
-              all_group_labels: List[int], scoring: str, exp_relevance = True, k=50, weight_factor=None):
+              all_group_labels: List[int], scoring: str, k=50, weight_factor=None):
     curve_mean = []
     curve_std = []
-    rels = evaluation_helper.get_rels(all_group_labels, exp_relevance)
+    rels = evaluation_helper.get_rels(all_group_labels)
 
     max_ndcg, max_ndcg_std, best_percentil = 0, 0, 0
     percentils = np.linspace(50, 99, 50)
@@ -81,10 +81,10 @@ def ndcg_curve_percentil(trajectories_of_all_runs: List[List[evaluation_helper.P
 
 
 def ndcg_curve_exp_weighted_avg(trajectories_of_all_runs: List[List[evaluation_helper.PredictedTrajectory]], model_name: str, all_ids: List[str], 
-              all_group_labels: List[int], exp_relevance = True, k=50):
+              all_group_labels: List[int], k=50):
     curve_mean = []
     curve_std = []
-    rels = evaluation_helper.get_rels(all_group_labels, exp_relevance)
+    rels = evaluation_helper.get_rels(all_group_labels)
     max_ndcg, max_ndcg_std, best_param = 0, 0, 0
     weight_params = np.linspace(0.01, 1.2, 120)
 

@@ -83,7 +83,7 @@ for exp_relevance in [True, False]:
 
 # SCORING BASED ON WHOLE TRAJECTORY
 print("------------------ SCORING BASED ON WHOLE TRAJECTORY ---------------------\n")
-for num_trajectories in [10, 20, 50]:
+for num_trajectories in [50]:
     print("TOP ", num_trajectories, "ANOMALIES")
     for scoring in ["avg", "weighted-avg"]:
 
@@ -95,14 +95,14 @@ for num_trajectories in [10, 20, 50]:
             for path in path_list_predictions:
                 trajectories_of_all_runs.append(evaluation_helper.get_trajectories(path))
 
-            rels = evaluation_helper.get_rels(all_group_labels, True)
+            rels = evaluation_helper.get_rels(all_group_labels)
             max_dcg, max_dcg_std = dcg_and_ndcg.ndcg_mean_and_std_full_tr_scoring(trajectories_of_all_runs, all_ids, all_group_labels, scoring, rels, k=num_trajectories)
             print(model_name + " - " + scoring + ": \tMax NDCG Score = ", max_dcg, " (std: ", max_dcg_std, ")")
     print()
 
 best_params_per_method = []
 
-for num_trajectories in [10, 20, 50]:
+for num_trajectories in [50]:
     print("TOP ", num_trajectories, "ANOMALIES")
     plt.figure(figsize=(10, 6))
     temp = []
@@ -113,7 +113,7 @@ for num_trajectories in [10, 20, 50]:
         for path in path_list_predictions:
             trajectories_of_all_runs.append(evaluation_helper.get_trajectories(path))
 
-        max_dcg, max_dcg_std, best_exp_param = dcg_and_ndcg.ndcg_curve_exp_weighted_avg(trajectories_of_all_runs, model_name, all_ids, all_group_labels, exp_relevance=True, k=num_trajectories)
+        max_dcg, max_dcg_std, best_exp_param = dcg_and_ndcg.ndcg_curve_exp_weighted_avg(trajectories_of_all_runs, model_name, all_ids, all_group_labels, k=num_trajectories)
         temp.append(best_exp_param)
         print(model_name + " - exp-weighted-avg: \tMax NDCG Score with a=", round(best_exp_param, 2), ": ", max_dcg, " (std: ", max_dcg_std, ")")
     best_params_per_method.append(temp)
@@ -153,9 +153,21 @@ for exp_relevance in [True, False]:
     print()
 '''
 
+# HISTOGRAMS BEST SCORING
+
+for num_trajectories in [10, 20, 50, 100]:
+    path_list_predictions = evaluation_helper.find_matching_files(evalconfig.path_store_anomalies, "2sec_MobileNet_v3_asymmetric_prob")
+
+    trajectories_of_all_runs = []
+    for path in path_list_predictions:
+        trajectories_of_all_runs.append(evaluation_helper.get_trajectories(path))
+
+    hg.plot_best_scoring_histogram(trajectories_of_all_runs, weight_param=best_params_per_method[-1][-2], k=num_trajectories)
+
+
 # TOP-K SCORING
 print("------------------ SCORING BASED ON TOP-K ANOMALY POINTS PER TRAJECTORY ---------------------\n")
-for num_trajectories in [10, 20, 50]:
+for num_trajectories in [50]:
     print("TOP ", num_trajectories, "ANOMALIES")
     for scoring in ["min", "avg", "weighted-sum"]:
 
@@ -168,7 +180,7 @@ for num_trajectories in [10, 20, 50]:
                 trajectories_of_all_runs.append(evaluation_helper.get_trajectories(path))
 
             max_dcg, max_dcg_std, min_length = dcg_and_ndcg.ndcg_curve(trajectories_of_all_runs, model_name, all_ids, all_group_labels, scoring, 
-                                                        exp_relevance=True, k=num_trajectories)
+                                                        k=num_trajectories)
             print(model_name + " - " + scoring + ": \tMax NDCG Score at ", min_length, ": ", max_dcg, " (std: ", max_dcg_std, ")")
         
         plt.savefig(os.path.join(path_store_plot, "ndcg-curve-top-" + str(num_trajectories) + "anomalies-" + scoring + ".png"))

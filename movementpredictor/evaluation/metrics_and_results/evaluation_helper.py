@@ -7,8 +7,6 @@ import os
 import json
 import numpy as np
 
-from movementpredictor.anomalydetection import anomaly_detector
-
 
 log = logging.getLogger(__name__)
 evalconfig = EvalConfig()
@@ -18,8 +16,8 @@ groups = {
     1 : [0, 1, 4],                 # false positive or uninteresting 
     2 : [2, 3, 6, 8, 15, 17, 27, 31],               # rather uninteresting anomaly
     3 : [5, 7, 10, 12, 16, 26, 29, 30],                # interesting anomaly
-    4 : [9, 11, 14, 18, 21],                                                     # highly interesting anomaly
-    5 : [13, 19, 20, 22, 23, 24, 25, 28, 32]                 # dangerous behaviour
+    4 : [9, 11, 14, 18, 21, 24],                                                     # highly interesting anomaly
+    5 : [13, 19, 20, 22, 23, 25, 28, 32]                 # dangerous behaviour
 }
 
 
@@ -36,10 +34,12 @@ class PredictedTrajectory:
         path_label = os.path.join(evalconfig.path_label_box, evalconfig.camera, id, "labeldata.json")
         with open(path_label, "r") as json_file:
             labeldata = json.load(json_file)
-        return labeldata["label"]
+        label = labeldata["label"]
+        return label if label != "None" else -1
 
     @staticmethod
     def add_anomaly_group(label: int):
+        if label == "None": label = -1
         for group, labels in groups.items():
             if label in labels:
                 return group
@@ -59,7 +59,7 @@ def all_predicted_ids_with_group(path_label_box, camera):
         with open(full_path, "r") as json_file:
             labeldata = json.load(json_file)
          
-        event_labels.append(labeldata["label"])
+        event_labels.append(labeldata["label"] if labeldata["label"] != "None" else -1)
         label = PredictedTrajectory.add_anomaly_group(labeldata["label"])
         ids.append(labeldata["obj_id"])
         group_labels.append(label)
@@ -109,8 +109,11 @@ def get_y_true(all_group_labels: List[int]):
     return [group_label for group_label in all_group_labels if group_label != 0]
 
 
-def get_rels(all_group_labels: List[int], exp_relevance: bool):
-    return [2**max(0, anomaly_group - 1) -1 if exp_relevance else max(0, anomaly_group - 1) for anomaly_group in get_y_true(all_group_labels)]
+#def get_rels(all_group_labels: List[int], exp_relevance: bool):
+ #   return [2**max(0, anomaly_group - 1) -1 if exp_relevance else max(0, anomaly_group - 1) for anomaly_group in get_y_true(all_group_labels)]
+
+def get_rels(all_group_labels: List[int]):
+    return [max(0, anomaly_group - 1) for anomaly_group in get_y_true(all_group_labels)]
 
 
 def get_scores_num_trajectories_based(trajectories: List[PredictedTrajectory], num_anomaly_trajectories: int, min_num_anomaly_frames: int, all_ids: List[str], all_group_labels: List[int],
@@ -144,6 +147,41 @@ def get_scores_num_trajectories_based(trajectories: List[PredictedTrajectory], n
     return np.array(scores)
 
 
+def score_trajectory(trajectory: PredictedTrajectory, scoring: str = "weighted-avg", exp_para=None):
+    sorted_measures = sorted(trajectory.measures, reverse=True)
+
+    if scoring == "avg":
+        score = np.mean(np.array(sorted_measures))
+
+    elif scoring == "weighted-avg":
+        sorted_measures = np.array(sorted_measures)
+        score = 0
+        sum_weights = 0
+        length_trajectory = len(sorted_measures)
+        for rank, measure in enumerate(sorted_measures):
+            weight = (length_trajectory-rank)/length_trajectory
+            score += (measure*weight)
+            sum_weights += weight
+        score = score/sum_weights
+
+    elif scoring == "exp-weighted-avg":
+        sorted_measures = np.array(sorted_measures)
+        score = 0
+        sum_weights = 0
+        for rank, measure in enumerate(sorted_measures):
+            weight = (0.5 if exp_para is None else exp_para)**rank
+            score += (measure*weight)
+            sum_weights += weight
+        score = score/sum_weights
+
+    else:
+        log.error("scoring has to be avg, weighted-avg or exp-weighted-avg")
+        exit(1)
+    
+    return score
+
+
+
 def get_scores_full_trajectory(trajectories: List[PredictedTrajectory], all_ids: List[str], all_group_labels: List[int], scoring: str = "weighted-avg", exp_para=None):
     ''' scoring: calculation method for the score - 'avg', 'min', 'weighted-sum' or 'med' '''
     scores = []
@@ -158,37 +196,7 @@ def get_scores_full_trajectory(trajectories: List[PredictedTrajectory], all_ids:
             scores.append(0)
 
         else:
-            sorted_measures = sorted(traj_map[car_id].measures, reverse=True)
-
-            if scoring == "avg":
-                score = np.mean(np.array(sorted_measures))
-
-            elif scoring == "weighted-avg":
-                sorted_measures = np.array(sorted_measures)
-                score = 0
-                sum_weights = 0
-                length_trajectory = len(sorted_measures)
-                for rank, measure in enumerate(sorted_measures):
-                    weight = (length_trajectory-rank)/length_trajectory
-                    score += (measure*weight)
-                    sum_weights += weight
-                score = score/sum_weights
-
-            elif scoring == "exp-weighted-avg":
-                sorted_measures = np.array(sorted_measures)
-                score = 0
-                sum_weights = 0
-                length_trajectory = len(sorted_measures)
-                for rank, measure in enumerate(sorted_measures):
-                    weight = (0.5 if exp_para is None else exp_para)**rank
-                    score += (measure*weight)
-                    sum_weights += weight
-                score = score/sum_weights
-
-            else:
-                log.error("scoring has to be avg, weighted-avg or exp-weighted-avg")
-                exit(1)
-
+            score = score_trajectory(traj_map[car_id], scoring, exp_para)
             scores.append(score)
     
     rng = np.random.default_rng(seed=42)  

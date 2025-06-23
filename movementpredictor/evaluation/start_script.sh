@@ -45,7 +45,7 @@ for seconds in "${seconds_list[@]}"; do
             echo "  PATH_TEST_DATA=$PATH_TEST_DATA"
             echo "  OUTPUT_DISTR=$OUTPUT_DISTR"
 
-            python3 movementpredictor/evaluation/eval_prep.py
+            python3 movementpredictor/evaluation/eval_data.py
 
             echo "--- Finished ---"
         done
