@@ -30,8 +30,8 @@ def calculate_trajectory_anomaly_scores(samples_with_stats: List[inferencing.Inf
 
     trajectories_with_score = []
     for obj_id, distances in trajectories.items():
-        if len(distances) < 10:
-            continue
+        #if len(distances) < 10:
+         #   continue
         sorted_measures = np.array(sorted(distances, reverse=True))
         score = 0
         sum_weights = 0
@@ -105,7 +105,7 @@ def get_unlikely_trajectories(samples_with_stats: List[inferencing.InferenceResu
     selected_trajectories = []
     for obj_id, samples in samples_by_trajectory.items():
         score = score_dict.get(obj_id, 0.0)
-        
+
         if score >= score_threshold:
             selected_samples.extend(samples)
             selected_trajectories.append((obj_id, samples))
