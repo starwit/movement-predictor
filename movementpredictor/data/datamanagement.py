@@ -86,6 +86,7 @@ class TrackingDataManager:
                 start_message = next(messages)
                 dump_meta = saedump.DumpMeta.model_validate_json(start_message)
                 log.info(f'Starting playback from file {path} containing streams {dump_meta.recorded_streams}')
+                frames_count = 0
                 
                 for count, message in tqdm(enumerate(messages)):
                     #if count > 10000:
@@ -100,8 +101,11 @@ class TrackingDataManager:
                         if self.start_timestamp is None:
                             self.start_timestamp = proto.frame.timestamp_utc_ms
                         else:
-                            diff = proto.frame.timestamp_utc_ms - self.start_timestamp
-                            self.frame_rate = 1000/diff
+                            frames_count += 1
+                            if frames_count == 10:
+                                diff = proto.frame.timestamp_utc_ms - self.start_timestamp
+                                self.frame_rate = 1000*10/diff
+                                print("frame-rate=", self.frame_rate)
                     
                     extracted_tracks = self.extract_tracked_objects(proto, extracted_tracks, inferencing)
 

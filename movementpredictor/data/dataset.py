@@ -50,11 +50,11 @@ def getTorchDataLoader(dataset, shuffle=True):
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=False)
 
 
-def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], time_diff_prediction, frame_rate) -> DataLoader:
+def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], time_diff_prediction=2, frame_rate=10) -> DataLoader:
     """
     Creates a pytorch DataLoader to make the data progressible for pytorch deep learning models.
     Based on the tracking information the model's input (boundingboxes, movement_angles) 
-    and the target (vehicles position 1 second after input scene) are created and put into one dataset.
+    and the target (vehicles position "time_diff_prediction" seconds after input scene) are created and put into one dataset.
     
     Args:
         tracks: dict with trajectories (key: object id, value: list of this object's tracks)
