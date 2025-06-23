@@ -132,7 +132,7 @@ class BaseProbabilistic(nn.Module):
             self.backbone_output_dim = 512 * 4 * 4
         
         else: 
-            log.error("architecture " + architecture + " does not exist!")
+            log.error("Model architecture " + architecture + " does not exist!")
 
         self.mean_layer = nn.Linear(self.backbone_output_dim, 2)  # µ_x, µ_y
         self.log_var_layer = nn.Linear(self.backbone_output_dim, 2)  # log(σ_x²), log(σ_y²)
