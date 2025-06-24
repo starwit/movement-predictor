@@ -89,8 +89,8 @@ class TrackingDataManager:
                 frames_count = 0
                 
                 for count, message in tqdm(enumerate(messages)):
-                    #if count > 10000:
-                     #   break
+                    #if count < 900000 or count > 1000000:
+                     #   continue
                     event = saedump.Event.model_validate_json(message)
                     proto_bytes = pybase64.standard_b64decode(event.data_b64)
 

@@ -31,7 +31,7 @@ def main():
     #return
     samples_with_stats = inference_with_stats(model, test)
 
-    score_thr = anomaly_detector.calculate_trajectory_threshold(samples_with_stats, percentage_p=config.percentage_anomaly)
+    score_thr = anomaly_detector.calculate_trajectory_threshold(samples_with_stats, num_anomalous_trajectories=20)#percentage_p=config.percentage_anomaly)
     anomaly_detector.visualize_distances(samples_with_stats, config.path_plots)
     anomaly_detector.store_parameter(config.path_model, score_thr, config.percentage_anomaly)
     anomalies = anomaly_detector.get_unlikely_trajectories(samples_with_stats, score_thr)

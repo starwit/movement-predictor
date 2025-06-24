@@ -89,38 +89,38 @@ def store_data(tracks: dict, path_store, frame_rate, time_diff_prediction, folde
 
 
 def make_input_target_pairs(tracks: dict, frame_rate: float, time_diff_prediction: float) -> Dataset:
-    time_interval_in_millisec = 1100*time_diff_prediction
+    time_interval_in_millisec = 1400*time_diff_prediction
     prediction_step = 1000*time_diff_prediction
     input_target_pairs = []
-
-    estimated_frames = round((time_interval_in_millisec / 1000) * frame_rate)
 
     for trajectory in tqdm(tracks.values(), desc="creating dataset - calculating target positions"):
         if len(trajectory) == 0:
             continue
-        
-        cars = [input_tr.class_id == 2 for input_tr in trajectory]
-        if sum(cars) / len(cars) > 0.8:      # only examine vehicles that are at least 80% classified as a car -> high probability of actually being a car
-            
-            for i, input_tr in enumerate(trajectory):
-                if i + estimated_frames >= len(trajectory):
-                    break
 
-                if not input_tr.clear_detection:
-                    continue
+        # Only consider mostly-car objects
+        cars = [tr.class_id == 2 for tr in trajectory]
+        if sum(cars) / len(cars) <= 0.8:
+            continue
 
-                ts_slice = trajectory[i: i + estimated_frames]
-                ts_slice_smooth = [t for t in ts_slice if t.clear_detection]
+        for i, input_tr in enumerate(trajectory):
+            if not input_tr.clear_detection:
+                continue
 
-                if len(ts_slice_smooth) < 0.8*estimated_frames:
-                    continue
+            # Find all detections in time window starting from current timestamp
+            start_ts = input_tr.capture_ts
+            end_ts = start_ts + time_interval_in_millisec
 
-                duration = ts_slice_smooth[-1].capture_ts - input_tr.capture_ts
+            ts_slice = [tr for tr in trajectory[i:] if tr.capture_ts <= end_ts]
+            ts_slice_smooth = [t for t in ts_slice if t.clear_detection]
 
-                # make sure the object is detected in at least 80% of the frames
-                if duration*0.8 <=  time_interval_in_millisec:
-                    input_target_pairs.append([input_tr, get_position_after_time(ts_slice_smooth, prediction_step)])
-    
+            if len(ts_slice_smooth) < 2 or len(ts_slice_smooth) < 0.5*time_interval_in_millisec*frame_rate/1000:
+                continue  # not enough valid detections
+
+            duration = ts_slice_smooth[-1].capture_ts - ts_slice_smooth[0].capture_ts
+            if duration >= prediction_step*0.8:
+                target = get_position_after_time(ts_slice_smooth, prediction_step)
+                input_target_pairs.append([input_tr, target])
+
     timestamp_dict = defaultdict(list)
     
     for _, trajectory in tracks.items():
