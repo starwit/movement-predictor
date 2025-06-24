@@ -71,7 +71,7 @@ def calculate_trajectory_threshold(samples_with_stats: List[inferencing.Inferenc
     num_obj_ids_target = int(np.ceil((100 - percentage_p) / 100 * num_obj_ids_total)) if percentage_p else num_anomalous_trajectories
     threshold = trajectories_with_score[num_obj_ids_target-1][1]
 
-    print("Exp-weighted avg threshold: " + str(threshold))
+    log.info("Exp-weighted avg threshold: " + str(threshold))
     return threshold
 
 
