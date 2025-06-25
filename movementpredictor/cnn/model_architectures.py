@@ -17,7 +17,11 @@ def get_model(architecture, output_prob, path_model=None):
         model = AsymmetricProb(architecture=architecture)
     else:
         log.error(f"{output_prob} is not a known ouput distribution setting. Is has to be 'symmetric' or 'asymmetric'")
-        exit(1)
+        return None
+    
+    if architecture not in ["SimpleCNN", "MobileNet_v3", "SwinTransformer", "ResNet18"]:
+        log.error(f"{architecture} is not a known model architecture. Is has to be 'SimpleCNN', 'MobileNet_v3', 'SwinTransformer' or 'ResNet18'")
+        return None
 
     if path_model is not None:
         if path_model.endswith(".pth") and os.path.isfile(path_model):
@@ -133,6 +137,7 @@ class BaseProbabilistic(nn.Module):
         
         else: 
             log.error("Model architecture " + architecture + " does not exist!")
+            exit(1)
 
         self.mean_layer = nn.Linear(self.backbone_output_dim, 2)  # µ_x, µ_y
         self.log_var_layer = nn.Linear(self.backbone_output_dim, 2)  # log(σ_x²), log(σ_y²)
