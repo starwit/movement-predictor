@@ -14,7 +14,7 @@ class DataFilterer():
     min_movement = 0.05
     min_length = 7
     time_window_movement = 10000        # 10s
-    max_angle_change = 90
+    max_angle_change = 60
 
 
     def apply_filtering(self, tracking_list: list[TrackedObjectPosition]) -> Dict[str, list[TrackedObjectPosition]]:
