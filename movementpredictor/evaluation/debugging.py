@@ -49,7 +49,7 @@ for entry in os.listdir(path_label_box):
         #with open(path_label, "w", encoding="utf-8") as json_file:
          #   json.dump(labeldata, json_file, indent=4)
 
-        if labeldata["label"] == 22:
+        if labeldata["label"] == "None":
             print(labeldata["obj_id"])
 
         #if labeldata["time_interval"][1] - labeldata["time_interval"][0] > 5000 and (labeldata["label"] == 0 or labeldata["label"] == 2):
@@ -78,44 +78,6 @@ for entry in os.listdir(path_label_box):
 
          #   print(f"Folder '{entry}' has no out.mp4")
           #  redo_video[labeldata["obj_id"]] = [labeldata["time_interval"][0], labeldata["time_interval"][1]]
-
-'''
-label_counts = Counter(all_lost_event_labels)
-sorted_labels = sorted(label_counts.keys())
-frequencies = [label_counts[label] for label in sorted_labels]
-
-plt.figure(figsize=(8, 5))
-plt.bar(sorted_labels, frequencies)
-plt.xlabel("Label")
-plt.ylabel("Frequency")
-plt.title("Histogram of lost event labels")
-plt.xticks(sorted_labels)  
-plt.grid(axis='y')
-#plt.ylim(0, 94)
-plt.tight_layout()
-path = os.path.join("movementpredictor/evaluation/plots", evalconfig.camera)
-os.makedirs(path, exist_ok=True)
-plt.savefig(os.path.join(path, "LostEventFrequencies.png"))
-plt.close()
-'''
-
-label_counts = Counter(all_event_labels)
-sorted_labels = sorted(label_counts.keys())
-frequencies = [label_counts[label] for label in sorted_labels]
-
-plt.figure(figsize=(8, 5))
-plt.bar(sorted_labels, frequencies)
-plt.xlabel("Label")
-plt.ylabel("Frequency")
-plt.title("Histogram of event labels")
-plt.xticks(sorted_labels)  
-plt.grid(axis='y')
-plt.ylim(0, 94)
-plt.tight_layout()
-path = os.path.join("movementpredictor/evaluation/plots", evalconfig.camera)
-os.makedirs(path, exist_ok=True)
-plt.savefig(os.path.join(path, "FoundEventFrequencies.png"))
-plt.close()
 
 
 #if len(redo_video) != 0:
