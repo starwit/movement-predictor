@@ -22,7 +22,6 @@ class TrackedObjectPosition(BaseModel):
     bbox: List[List[float]]  # [[x1, y1], [x2, y2]]
     clear_detection: bool = False
     movement_angle: Optional[float] = None 
-   # movement_speed: Optional[float] = None 
 
 
 def get_downsampled_tensor_img(frame, pixel):
@@ -88,9 +87,7 @@ class TrackingDataManager:
                 log.info(f'Starting playback from file {path} containing streams {dump_meta.recorded_streams}')
                 frames_count = 0
                 
-                for count, message in tqdm(enumerate(messages)):
-                    #if count < 900000 or count > 1000000:
-                     #   continue
+                for message in tqdm(messages):
                     event = saedump.Event.model_validate_json(message)
                     proto_bytes = pybase64.standard_b64decode(event.data_b64)
 

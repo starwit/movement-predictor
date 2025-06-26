@@ -23,7 +23,7 @@ def main():
     with open(os.path.join(config.path_model, "parameters.json"), "r") as json_file:
         paras = json.load(json_file)
 
-    ds = dataset.getTorchDataSet(os.path.join(config.path_store_data, "test"), pixel_per_axis=paras["pixel_per_axis"])
+    ds = dataset.getTorchDataSet(os.path.join(config.path_store_data, "test"), config.pixel_per_axis)#pixel_per_axis=paras["pixel_per_axis"])
     test = dataset.getTorchDataLoader(ds, shuffle=False)
 
     frame = datamanagement.load_background_frame(config.path_store_data)

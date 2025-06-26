@@ -48,7 +48,7 @@ def calculate_trajectory_anomaly_scores(samples_with_stats: List[inferencing.Inf
 def calculate_trajectory_threshold(samples_with_stats: List[inferencing.InferenceResult], percentage_p=None, 
                             num_anomalous_trajectories=None):
     """
-    computes threshold so that 'percentage_p' percent of object IDs (trajectories) are considered normal.
+    computes threshold so that 'percentage_p' percent of or 'num_anomalous_trajectories' object IDs (trajectories) are considered normal.
     """
     if percentage_p is None and num_anomalous_trajectories is None:
         log.error("both, percentage_p and num_anomalous_trajectories are None. You have to specify one.")
@@ -76,14 +76,12 @@ def calculate_trajectory_threshold(samples_with_stats: List[inferencing.Inferenc
 
 
 def visualize_distances(samples_with_stats: List[inferencing.InferenceResult], path_plots):
-    #threshold_dists, anomaly_obj_ids = calculate_threshold(samples_with_stats, percentage_p, num_anomalous_trajectories)
     dists = [sample.prediction.distance_of_target for sample in samples_with_stats]
 
     plt.hist(dists, bins=100, edgecolor='black')
     plt.title('distance distribution')
     plt.xlabel('dist')
     plt.ylabel('amount')
-    #plt.axvline(x=threshold_dists, color='black', linestyle='dashed', label='threshold')
 
     os.makedirs(path_plots, exist_ok=True)
     path = os.path.join(path_plots, "distances.png")
@@ -195,12 +193,10 @@ def plot_unlikely_samples(samples_with_stats, frame, test, threshold_dist, path_
     batch_size = test.batch_size
 
     dists = [sample.prediction.distance_of_target for sample in samples_with_stats]
-    #var_size = [np.diag(sample["prediction"]["variance"]).sum() for sample in samples_with_stats]
     mus = [np.array(sample.prediction.mean) for sample in samples_with_stats]
     covs = [np.array(sample.prediction.variance) for sample in samples_with_stats]
 
     dists = [dists[i:i + batch_size] for i in range(0, len(dists), batch_size)]
-    #var_size = [var_size[i:i + batch_size] for i in range(0, len(var_size), batch_size)]
     mus = [mus[i:i + batch_size] for i in range(0, len(mus), batch_size)]
     covs = [covs[i:i + batch_size] for i in range(0, len(covs), batch_size)]
 

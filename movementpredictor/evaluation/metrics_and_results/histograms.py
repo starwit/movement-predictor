@@ -27,7 +27,6 @@ class GroupHistogram:
         self.x_labels = []
         for k in self.key_order:
             self.x_labels.extend(sorted(groups[k], reverse=True))
-            #self.x_labels.extend(groups[k])
         self.n_bins = len(self.x_labels)
         
         self.value2group = {v: k for k, vals in groups.items() for v in vals}
@@ -66,7 +65,6 @@ class GroupHistogram:
             ax.set_xlabel('Label Value')
             if idx % 3 == 0:
                 ax.set_ylabel('Average Count')
-            #ax.set_ylim(-0.5, 30.5)
             ax.set_title(f"Min {num_anomaly_points} unusual points per trajectory")
             ax.grid(axis='y', linestyle='-', alpha=0.3)
 

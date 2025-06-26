@@ -66,7 +66,6 @@ class DataFilterer():
                 track.center = center
 
             self._calculate_movement_angle(tracks_of_object)
-            #DataFilterer._calculate_movement_speed(tracks_of_object)
             new_mapping[key] = tracks_of_object
             
         return new_mapping
@@ -213,22 +212,6 @@ class DataFilterer():
         smoothed_centers = np.stack([cx_smooth, cy_smooth], axis=1)
 
         return smoothed_bboxes, smoothed_centers
-    
-
-    @staticmethod
-    def _calculate_movement_speed(tracks_of_object: list[TrackedObjectPosition]):
-
-        for i in range(len(tracks_of_object)-1):
-            track = tracks_of_object[i]
-            next_track = tracks_of_object[i+1]
-
-            time_diff = next_track.capture_ts - track.capture_ts
-            distance = np.linalg.norm(next_track.center-track.center)
-            speed = distance/(time_diff/1000)           # distance in frame image per second
-
-            track.movement_speed = speed
-            if i == len(tracks_of_object)-2:
-                tracks_of_object[-1].movement_speed = speed
 
     
     @staticmethod
