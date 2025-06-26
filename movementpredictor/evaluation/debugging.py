@@ -49,7 +49,8 @@ for entry in os.listdir(path_label_box):
         #with open(path_label, "w", encoding="utf-8") as json_file:
          #   json.dump(labeldata, json_file, indent=4)
 
-        if labeldata["label"] == "None":
+        if labeldata["label"] == 22:
+            #shutil.rmtree(full_path)
             print(labeldata["obj_id"])
 
         #if labeldata["time_interval"][1] - labeldata["time_interval"][0] > 5000 and (labeldata["label"] == 0 or labeldata["label"] == 2):
@@ -61,8 +62,8 @@ for entry in os.listdir(path_label_box):
 
         #if video_found:
          #   videos_found += 1
-        if labeldata["label"] != 0:
-            all_event_labels.append(labeldata["label"])
+        #if labeldata["label"] != 0:
+         #   all_event_labels.append(labeldata["label"])
         #labeldata["time_interval"] = []
 
         #with open(path_label, "w", encoding="utf-8") as json_file:

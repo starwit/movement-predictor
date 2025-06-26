@@ -89,7 +89,7 @@ def store_data(tracks: dict, path_store, frame_rate, time_diff_prediction, folde
 
 
 def make_input_target_pairs(tracks: dict, frame_rate: float, time_diff_prediction: float) -> Dataset:
-    time_interval_in_millisec = 1400*time_diff_prediction
+    time_interval_in_millisec = 1200*time_diff_prediction
     prediction_step = 1000*time_diff_prediction
     input_target_pairs = []
 
@@ -113,13 +113,11 @@ def make_input_target_pairs(tracks: dict, frame_rate: float, time_diff_predictio
             ts_slice = [tr for tr in trajectory[i:] if tr.capture_ts <= end_ts]
             ts_slice_smooth = [t for t in ts_slice if t.clear_detection]
 
-            if len(ts_slice_smooth) < 2 or len(ts_slice_smooth) < 0.5*time_interval_in_millisec*frame_rate/1000:
+            if len(ts_slice_smooth) < 0.8*time_interval_in_millisec*frame_rate/1000:
                 continue  # not enough valid detections
 
-            duration = ts_slice_smooth[-1].capture_ts - ts_slice_smooth[0].capture_ts
-            if duration >= prediction_step*0.8:
-                target = get_position_after_time(ts_slice_smooth, prediction_step)
-                input_target_pairs.append([input_tr, target])
+            target = get_position_after_time(ts_slice_smooth, prediction_step)
+            input_target_pairs.append([input_tr, target])
 
     timestamp_dict = defaultdict(list)
     
@@ -130,11 +128,9 @@ def make_input_target_pairs(tracks: dict, frame_rate: float, time_diff_predictio
     for i, (inp, tar) in tqdm(enumerate(input_target_pairs), desc="creating dataset - collecting all bboxs"):
         other_vehicles = timestamp_dict[inp.capture_ts]
         bboxs = [vehicle.bbox for vehicle in other_vehicles]
-        #speeds = [vehicle.movement_speed for vehicle in other_vehicles]
         angles = [vehicle.movement_angle for vehicle in other_vehicles]
 
         bboxs_other = np.array(bboxs, dtype=np.float32)
-        #speeds_other = np.array(speeds, dtype=np.float32)
         angles_other = np.array(angles, dtype=np.float32)
         input_bbox = np.array(inp.bbox, dtype=np.float32)
         target_pos = np.array(tar, dtype=np.float32)
@@ -142,8 +138,7 @@ def make_input_target_pairs(tracks: dict, frame_rate: float, time_diff_predictio
         obj_id = np.str_(inp.uuid)
         angle = np.float32(inp.movement_angle)
 
-        input_target_pairs[i] = [bboxs_other, #speeds_other, 
-                                 angles_other, input_bbox, target_pos, frame_ts, obj_id, angle]
+        input_target_pairs[i] = [bboxs_other, angles_other, input_bbox, target_pos, frame_ts, obj_id, angle]
     
     return input_target_pairs
 
@@ -169,8 +164,6 @@ def plotDataSamples(dataloader: DataLoader, amount: int, path: str, frame: torch
         sample, target = sample_batch[0], target_batch[0]
         frame_np = frame.numpy()
 
-        #mask_others_np = np.zeros(frame_np.shape)
-        #mask_others_np[sample[2].cpu().numpy() != 0] = 1
         mask_others_np_sin = sample[0].cpu().numpy()
         mask_others_np_cos = sample[1].cpu().numpy()
         mask_others_np = np.zeros(frame_np.shape)
@@ -269,7 +262,6 @@ def create_mask_speed_tensor(pixel, bboxs, speeds):
 class CNNData(Dataset):
     def __init__(self, inp_tar_list, pixel_per_axis):
         (self.other_vehicles_bboxs,
-         #self.other_vehicles_speeds,
          self.other_vehicles_angles,
          self.objects_of_interest,
          self.targets,
@@ -284,7 +276,6 @@ class CNNData(Dataset):
 
     def __getitem__(self, idx):
         other_bboxs = self.other_vehicles_bboxs[idx]
-        #other_speeds = self.other_vehicles_speeds[idx]
         other_angles = self.other_vehicles_angles[idx]
         obj_bbox = self.objects_of_interest[idx]
         obj_angle = self.angles[idx]
@@ -293,11 +284,9 @@ class CNNData(Dataset):
         obj_id = self.ids[idx]
 
         mask_tensor_others_angle = create_mask_angle_tensor(self.pixel_per_axis, other_bboxs, angles=other_angles)
-       # mask_tensor_others_speed = create_mask_speed_tensor(self.pixel_per_axis, other_bboxs, speeds=other_speeds)
         mask_tensor_interest = create_mask_angle_tensor(self.pixel_per_axis, [obj_bbox], angles=[obj_angle])
 
-        model_input = torch.cat((mask_tensor_others_angle, #mask_tensor_others_speed, 
-                                 mask_tensor_interest), dim=0).float()
+        model_input = torch.cat((mask_tensor_others_angle, mask_tensor_interest), dim=0).float()
         target = torch.tensor(target, dtype=torch.float32)
 
         return model_input, target, frame_ts, obj_id
