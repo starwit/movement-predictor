@@ -1,0 +1,17 @@
+venv/
+.venv
+.vscode
+cache
+dist
+__pycache__
+
+.git/
+
+datasets/
+models/
+source/
+plots/
+docs/
+evaluation/
+traffic_anomaly_dataset/
+*.mp4
