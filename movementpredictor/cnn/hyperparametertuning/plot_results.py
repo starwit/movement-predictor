@@ -12,6 +12,7 @@ import pandas as pd
 
 config = ModelConfig()
 path_json = os.path.join(config.path_model, "optuna_full_history.json")
+print(path_json)
 
 with open(path_json, "r") as f:
     results = json.load(f)
