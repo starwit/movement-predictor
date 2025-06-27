@@ -29,8 +29,16 @@ def get_model(architecture, output_prob, path_model=None):
         else:
             weight_path = os.path.join(path_model, "model_weights.pth")
 
-        weights = torch.load(weight_path, map_location=device)
-        model.load_state_dict(weights, strict=True)
+        try:
+            weights = torch.load(weight_path, map_location=device)
+        except:
+            log.error(f"Model weights not found at {weight_path}")
+            return None
+        try:    
+            model.load_state_dict(weights, strict=True)
+        except:
+            log.error(f"Model weights do not fit model architecture")
+            return None
 
     model.to(device)
     return model
