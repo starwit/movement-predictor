@@ -20,7 +20,7 @@ def main():
     trackManager = datamanagement.TrackingDataManager()
     trackedObjects = trackManager.getTrackedBaseData(config.path_sae_data_train, inferencing=False)
     trackedObjects = DataFilterer().apply_filtering(trackedObjects)
-    dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate, config.time_diff_prediction, "train", name_dump=filename_without_extension)
+    dataset.store_data(trackedObjects, config.path_store_data, config.time_diff_prediction, "train", frame_rate=10, name_dump=filename_without_extension)
 
     # visualization
     train_ds = dataset.getTorchDataSet(os.path.join(config.path_store_data, "train"), pixel_per_axis=config.pixel_per_axis)

@@ -72,7 +72,7 @@ def load_background_frame(path_store):
 
 class TrackingDataManager:
     border_threshold = None
-    frame_rate = None
+    #frame_rate = None
     start_timestamp = None
 
     def getTrackedBaseData(self, path, inferencing=True) -> list[TrackedObjectPosition]:
@@ -85,7 +85,7 @@ class TrackingDataManager:
                 start_message = next(messages)
                 dump_meta = saedump.DumpMeta.model_validate_json(start_message)
                 log.info(f'Starting playback from file {path} containing streams {dump_meta.recorded_streams}')
-                frames_count = 0
+                #frames_count = 0
                 
                 for message in tqdm(messages):
                     event = saedump.Event.model_validate_json(message)
@@ -94,15 +94,15 @@ class TrackingDataManager:
                     proto = SaeMessage()
                     proto.ParseFromString(proto_bytes)
 
-                    if self.frame_rate is None:
-                        if self.start_timestamp is None:
-                            self.start_timestamp = proto.frame.timestamp_utc_ms
-                        else:
-                            frames_count += 1
-                            if frames_count == 10:
-                                diff = proto.frame.timestamp_utc_ms - self.start_timestamp
-                                self.frame_rate = 1000*10/diff
-                                print("frame-rate=", self.frame_rate)
+                    #if self.frame_rate is None:
+                     #   if self.start_timestamp is None:
+                      #      self.start_timestamp = proto.frame.timestamp_utc_ms
+                       # else:
+                        #    frames_count += 1
+                         #   if frames_count == 100:
+                          #      diff = proto.frame.timestamp_utc_ms - self.start_timestamp
+                           #     self.frame_rate = 1000*100/diff
+                            #    print("frame-rate=", self.frame_rate)
                     
                     extracted_tracks = self.extract_tracked_objects(proto, extracted_tracks, inferencing)
 
