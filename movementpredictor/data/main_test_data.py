@@ -17,7 +17,7 @@ def main():
 
     name_sae_dump =  os.path.basename(config.path_sae_data_test)
     filename_without_extension, _ = os.path.splitext(name_sae_dump)
-    dataset.store_data(trackedObjects, config.path_store_data, trackManager.frame_rate, config.time_diff_prediction, name_dump=filename_without_extension)
+    dataset.store_data(trackedObjects, config.path_store_data, config.time_diff_prediction, frame_rate=10, name_dump=filename_without_extension)
 
 
 if __name__ == "__main__":

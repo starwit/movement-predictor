@@ -1,17 +1,30 @@
+# virtual envs
 venv/
-.venv
-.vscode
-cache
-dist
-__pycache__
+.venv/
 
+# python caches
+__pycache__/
+*.py[cod]
+
+# git
 .git/
 
+# IDE/editor
+.vscode/
+
+# raw data & models (huge dirs!)
 datasets/
 models/
+traffic-anomaly-dataset/
+
+# other heavy folders
 source/
 plots/
 docs/
 evaluation/
-traffic_anomaly_dataset/
+
+# video files
 *.mp4
+
+# local env files
+.env*

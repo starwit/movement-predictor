@@ -5,12 +5,12 @@ set -euo pipefail
 #  Static env parameters
 # ————————————————————————————————————————————————————————————————
 export MODEL_ARCHITECTURE="MobileNet_v3"          
-export PATH_SAE_DATA_TRAIN="movementpredictor/data/source/RABPenn106th_2025-03-07.saedump"
-export PATH_SAE_DATA_TEST="movementpredictor/data/source/RABPenn106th_2025-04-09.saedump"
-export NAME_DATA="0.5sec"
-export TIME_DIFF_PREDICTION="0.5"
-export CAMERA="RABPenn106th"
-export PERCENTAGE_OF_ANOMALIES="99.7"
+export PATH_SAE_DATA_TRAIN="movementpredictor/data/source/RangelineSMedicalDr_2025-03-07.saedump"
+export PATH_SAE_DATA_TEST="movementpredictor/data/source/RangelineS116thSt_2025-06-18_24h.saedump"
+export NAME_DATA="2sec"
+export TIME_DIFF_PREDICTION="2"
+export CAMERA="RangelineS116thSt"
+export PERCENTAGE_OF_ANOMALIES="99.95"
 export PIXEL_PER_AXIS="120"
 
 # ————————————————————————————————————————————————————————————————
@@ -28,6 +28,16 @@ for OUTPUT_DISTR in symmetric asymmetric; do
     MODEL_DIR="models/${CAMERA}/${NAME_DATA}/${MODEL_ARCHITECTURE}_${OUTPUT_DISTR}_prob"
     SRC="${MODEL_DIR}/model_weights.pth"
     DST="${MODEL_DIR}/model_weights${i}.pth"
+
+    if [[ -f "$SRC" ]]; then
+      mv "$SRC" "$DST"
+      echo "✓ Renamed $SRC → $DST"
+    else
+      echo "Warning: $SRC not found, skipping rename"
+    fi
+    # rename the parameters
+    SRC="${MODEL_DIR}/parameters.json"
+    DST="${MODEL_DIR}parameters${i}.json"
 
     if [[ -f "$SRC" ]]; then
       mv "$SRC" "$DST"

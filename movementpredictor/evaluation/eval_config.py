@@ -1,13 +1,25 @@
 import logging
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
+from pathlib import Path
+
 
 class EvalConfig:
     log = logging.getLogger(__name__)
     instance = None
 
     def __init__(self):
-        load_dotenv()
+        env_path = find_dotenv(raise_error_if_not_found=False)
+
+        if not env_path:
+            tpl = Path(__file__).parent / ".env.template"
+            if tpl.exists():
+                env_path = str(tpl)
+            else:
+                self.log.error("Could not find .env or .env.template.")
+                exit(1)
+
+        load_dotenv(env_path)
 
         self.path_test_data = os.getenv("PATH_TEST_DATA")
         streamname = os.path.splitext(os.path.basename(self.path_test_data))[0]

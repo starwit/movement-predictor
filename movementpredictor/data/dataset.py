@@ -64,7 +64,7 @@ def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], time_dif
         DataLoader: pytorch Dataloader to make easy use of the dataset in batches
 
     """
-    raw_dataset = make_input_target_pairs(tracks, frame_rate, time_diff_prediction)
+    raw_dataset = make_input_target_pairs(tracks, time_diff_prediction, frame_rate)
     if len(raw_dataset) == 0:
         return None
     torch_dataset = CNNData(raw_dataset, pixel_per_axis)
@@ -72,8 +72,8 @@ def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], time_dif
     return torch_dataloader
 
 
-def store_data(tracks: dict, path_store, frame_rate, time_diff_prediction, folder="test", name_dump=None):
-    dataset = make_input_target_pairs(tracks, frame_rate, time_diff_prediction)
+def store_data(tracks: dict, path_store, time_diff_prediction, folder="test", frame_rate=10, name_dump=None):
+    dataset = make_input_target_pairs(tracks, time_diff_prediction, frame_rate)
 
     path = os.path.join(path_store, folder)
     os.makedirs(path, exist_ok=True)
@@ -88,36 +88,39 @@ def store_data(tracks: dict, path_store, frame_rate, time_diff_prediction, folde
         pickle.dump(dataset, f)
 
 
-def make_input_target_pairs(tracks: dict, frame_rate: float, time_diff_prediction: float) -> Dataset:
-    time_interval_in_millisec = 1200*time_diff_prediction
+def make_input_target_pairs(tracks: dict, time_diff_prediction: float, frame_rate: float = 10) -> Dataset:
+    time_interval_in_millisec = 1100*time_diff_prediction
     prediction_step = 1000*time_diff_prediction
     input_target_pairs = []
+
+    estimated_frames = round((time_interval_in_millisec / 1000) * frame_rate)
 
     for trajectory in tqdm(tracks.values(), desc="creating dataset - calculating target positions"):
         if len(trajectory) == 0:
             continue
 
-        # Only consider mostly-car objects
-        cars = [tr.class_id == 2 for tr in trajectory]
-        if sum(cars) / len(cars) <= 0.8:
-            continue
+        cars = [input_tr.class_id == 2 for input_tr in trajectory]
+        if sum(cars) / len(cars) > 0.8:      # only examine vehicles that are at least 80% classified as a car -> high probability of actually being a car
 
-        for i, input_tr in enumerate(trajectory):
-            if not input_tr.clear_detection:
-                continue
+            for i, input_tr in enumerate(trajectory):
+                if i + estimated_frames >= len(trajectory):
+                    break
 
-            # Find all detections in time window starting from current timestamp
-            start_ts = input_tr.capture_ts
-            end_ts = start_ts + time_interval_in_millisec
+                if not input_tr.clear_detection:
+                    continue
 
-            ts_slice = [tr for tr in trajectory[i:] if tr.capture_ts <= end_ts]
-            ts_slice_smooth = [t for t in ts_slice if t.clear_detection]
+                ts_slice = trajectory[i: i + estimated_frames]
+                ts_slice_smooth = [t for t in ts_slice if t.clear_detection]
 
-            if len(ts_slice_smooth) < 0.8*time_interval_in_millisec*frame_rate/1000:
-                continue  # not enough valid detections
+                if len(ts_slice_smooth) < 0.8*estimated_frames:
+                    continue
 
-            target = get_position_after_time(ts_slice_smooth, prediction_step)
-            input_target_pairs.append([input_tr, target])
+                duration = ts_slice_smooth[-1].capture_ts - input_tr.capture_ts
+
+                # make sure the object is detected in at least 80% of the frames
+                if duration*0.8 <=  time_interval_in_millisec:
+                    input_target_pairs.append([input_tr, get_position_after_time(ts_slice_smooth, prediction_step)])
+
 
     timestamp_dict = defaultdict(list)
     
