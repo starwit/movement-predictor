@@ -23,14 +23,7 @@ jobs:
       run: |
         docker build -t docker.internal.starwit-infra.de/movement-predictor:tmp .
 
-  cleanup:
-    name: "Clean docker"
-    needs: build 
-    runs-on: [self-hosted, linux, X64]
-    if: always()
-
-    steps:
-      - name: docker cleanup
-        run: |
-          docker buildx prune -af
-          docker rmi docker.internal.starwit-infra.de/movement-predictor:tmp
+    - name: docker cleanup
+      run: |
+        docker buildx prune -af
+        docker rmi docker.internal.starwit-infra.de/movement-predictor:tmp
