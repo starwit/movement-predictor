@@ -41,9 +41,10 @@ def extract_predictions(path_stored_predictions: str):
     return predictions
 
 
-def store_for_labelling(predicted_anomalies: Dict[str, Dict[str, List]], camera: str, path_label_storing: str, path_sae_dump: str):
+def store_for_labelling(predicted_anomalies: Dict[str, Dict[str, List]], camera: str, path_label_storing: str):
     not_stored_already = defaultdict()
-    path_label_storing = os.path.join(path_label_storing, camera)
+    #name_sae_dump = os.path.basename(path_sae_dump)
+    path_label_storing = os.path.join(path_label_storing, camera)#, name_sae_dump)
 
     for obj_id in predicted_anomalies.keys():
 
@@ -86,7 +87,7 @@ def store_for_labelling(predicted_anomalies: Dict[str, Dict[str, List]], camera:
     return not_stored_already
 
 
-def create_video(anomaly_dict: Dict[str, List[int]], path_sae_dump: str, path_store: str):
+def create_video(anomaly_dict: Dict[str, List[int]], path_sae_dumps: str, path_store: str):
     video_dict = defaultdict(list)
 
     for key in anomaly_dict.keys():
@@ -97,30 +98,30 @@ def create_video(anomaly_dict: Dict[str, List[int]], path_sae_dump: str, path_st
         end = max_ts + 5000
         video_dict[(key, start, end)] = []
     
-    
-    with open(path_sae_dump, 'r') as input_file:
-        messages = saedump.message_splitter(input_file)
+    for path_sae_dump in path_sae_dumps:
+        with open(path_sae_dump, 'r') as input_file:
+            messages = saedump.message_splitter(input_file)
 
-        start_message = next(messages)
-        saedump.DumpMeta.model_validate_json(start_message)
+            start_message = next(messages)
+            saedump.DumpMeta.model_validate_json(start_message)
 
-        for message in tqdm(messages, desc="collecting frames"):
-            event = saedump.Event.model_validate_json(message)
-            proto_bytes = pybase64.standard_b64decode(event.data_b64)
+            for message in tqdm(messages, desc="collecting frames"):
+                event = saedump.Event.model_validate_json(message)
+                proto_bytes = pybase64.standard_b64decode(event.data_b64)
 
-            proto = SaeMessage()
-            proto.ParseFromString(proto_bytes)
-            frame_ts = proto.frame.timestamp_utc_ms
+                proto = SaeMessage()
+                proto.ParseFromString(proto_bytes)
+                frame_ts = proto.frame.timestamp_utc_ms
 
-            fitting_keys = find_intervals_containing_timestamp(frame_ts, video_dict.keys())
+                fitting_keys = find_intervals_containing_timestamp(frame_ts, video_dict.keys())
 
-            for key in fitting_keys:
-                frame_info = [proto.frame, None]
-                for detection in proto.detections:
-                    if str(key[0]) == str(detection.object_id.hex()):
-                        frame_info[1] = detection.bounding_box
-                        break
-                video_dict[key].append(frame_info)
+                for key in fitting_keys:
+                    frame_info = [proto.frame, None]
+                    for detection in proto.detections:
+                        if str(key[0]) == str(detection.object_id.hex()):
+                            frame_info[1] = detection.bounding_box
+                            break
+                    video_dict[key].append(frame_info)
     
     for key in video_dict:
         path = os.path.join(path_store, key[0])
@@ -177,8 +178,7 @@ def main():
         new_intervals = store_for_labelling(
             preds,
             evalconfig.camera,
-            evalconfig.path_label_box,
-            evalconfig.path_sae_dump
+            evalconfig.path_label_box
         )
 
         for obj_id, (min_ts, max_ts) in new_intervals.items():
@@ -190,7 +190,7 @@ def main():
 
     if all_intervals:
         path_label_store = os.path.join(evalconfig.path_label_box, evalconfig.camera)
-        create_video(all_intervals, evalconfig.path_sae_dump, path_label_store)
+        create_video(all_intervals, evalconfig.path_sae_dumps, path_label_store)
 
 if __name__ == "__main__":
     main()

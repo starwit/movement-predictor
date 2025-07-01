@@ -1,14 +1,13 @@
+import datetime
 import json
 from typing import List
-import torch
+from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import os
 import numpy as np
-import cv2
 from tqdm import tqdm
 import logging
 from collections import Counter, defaultdict
-import math
 import pybase64
 
 from movementpredictor.data.datamanagement import get_downsampled_tensor_img
@@ -19,6 +18,7 @@ from movementpredictor.anomalydetection import visualizer
 
 from visionapi.sae_pb2 import SaeMessage
 from visionlib import saedump
+
 
 log = logging.getLogger(__name__)
 
@@ -187,38 +187,49 @@ def calculate_and_visualize_threshold(samples_with_stats: List[inferencing.Infer
     return threshold_dists, anomaly_obj_ids
 
 
+def plot_unlikely_samples(
+    frame: int,
+    test: DataLoader,
+    anomalies: List[inferencing.InferenceResult],
+    path_plots: str
+):
+    """
+    Generate and save plots for the anomalous samples.
 
-def plot_unlikely_samples(samples_with_stats, frame, test, threshold_dist, path_plots):
-    count = 0
-    batch_size = test.batch_size
+    Args:
+        frame (int): Current frame index or identifier for context in plotting.
+        test (DataLoader): Yields batches of (input, target, timestamp_list, obj_id_list).
+        anomalies (List[InferenceResult]): Only the inferences whose distance > threshold.
+        path_plots (str): Directory path where anomaly plots will be saved.
+    """
+    pred_map = {
+        (an.obj_id, an.timestamp): an.prediction
+        for an in anomalies
+    }
 
-    dists = [sample.prediction.distance_of_target for sample in samples_with_stats]
-    mus = [np.array(sample.prediction.mean) for sample in samples_with_stats]
-    covs = [np.array(sample.prediction.variance) for sample in samples_with_stats]
+    anomalies_dir = os.path.join(path_plots, "anomalies")
+    os.makedirs(anomalies_dir, exist_ok=True)
 
-    dists = [dists[i:i + batch_size] for i in range(0, len(dists), batch_size)]
-    mus = [mus[i:i + batch_size] for i in range(0, len(mus), batch_size)]
-    covs = [covs[i:i + batch_size] for i in range(0, len(covs), batch_size)]
+    for x, target, ts_list, obj_ids in test:
+        # ts_list and obj_ids are aligned lists
+        for inp, pos, obj_id, timestamp in zip(x, target, obj_ids, ts_list):
+            key = (obj_id, timestamp)
+            if key not in pred_map:
+                continue
 
-    if samples_with_stats[0].prediction.lambda_skew is not None:
-        skews = [np.array(sample.prediction.lambda_skew) for sample in samples_with_stats]
-        skews = [skews[i:i + batch_size] for i in range(0, len(skews), batch_size)]
-    else:
-        skews = [[None] * batch_size for _ in range(len(mus))]
+            p = pred_map[key]
+            mu   = np.array(p.mean)
+            cov  = np.array(p.variance)
+            skew = None if p.lambda_skew is None else np.array(p.lambda_skew)
+            dist = p.distance_of_target
 
-    path = os.path.join(path_plots, "anomalies")
-    os.makedirs(path, exist_ok=True)
-    for i, (x, target, _, _) in tqdm(enumerate(test)):
-        #if i == 1000:
-        #   break
-        for mu, cov, skew, inp, pos, dist in zip(mus[i], covs[i], skews[i], x, target, dists[i]):
-            if dist > threshold_dist:
-                count += 1
-                visualizer.plot_input_target_output(frame, inp, pos, mu, cov, skew=skew)
-                plt.title("Anomaly with distance " + str(dist))
-                plt.savefig(os.path.join(path, "anomaly_" + str(count) + ".png"))
-                plt.close()
-
+            # Plot and save
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            visualizer.plot_input_target_output(frame, inp, pos, mu, cov, skew=skew)
+            plt.title(f"Anomaly (dist={dist:.2f})")
+            plt.savefig(os.path.join(anomalies_dir, f"anomaly_{stamp}.png"))
+            plt.close()
+            
 
 def get_unlikely_samples(samples_with_stats: List[inferencing.InferenceResult], dist_thr, anomaly_obj_ids) -> List[inferencing.InferenceResult]:
     anomaly_samples: List[inferencing.InferenceResult] = []
@@ -228,6 +239,24 @@ def get_unlikely_samples(samples_with_stats: List[inferencing.InferenceResult], 
             anomaly_samples.append(sample)
     
     return anomaly_samples
+
+
+def get_unlikely_samples_inference(samples_with_stats: List[inferencing.InferenceResult], dist_thr, min_num_anomal_frames=10) -> List[inferencing.InferenceResult]:
+    anomaly_samples: List[inferencing.InferenceResult] = []
+
+    for sample in samples_with_stats:
+        if sample.prediction.distance_of_target >= dist_thr:
+            anomaly_samples.append(sample)
+
+    # remove samples whose id only exists once
+    anomaly_ids = [sample.obj_id for sample in anomaly_samples]
+    id_counts = Counter(anomaly_ids)
+    ids_to_remove = {id for id, count in id_counts.items() if count < min_num_anomal_frames}
+    indices_to_remove = [index for index, id in enumerate(anomaly_ids) if id in ids_to_remove]
+
+    anomalies = [sample for index, sample in enumerate(anomaly_samples) if index not in indices_to_remove]
+
+    return anomalies
 
 
 def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_dump, pixel_per_axis, path_plots):

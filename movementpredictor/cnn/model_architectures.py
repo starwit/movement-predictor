@@ -41,6 +41,7 @@ def get_model(architecture, output_prob, path_model=None):
             return None
 
     model.to(device)
+    model.eval()
     return model
 
 

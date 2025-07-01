@@ -1,9 +1,8 @@
 #!/bin/bash
 export PATH_LABEL_BOX="movementpredictor/evaluation/label_box"
 export PATH_STORE_PREDICTED_ANOMALIES="movementpredictor/evaluation/predictions"
-export PATH_SAE_DUMPS="movementpredictor/data/source/2024-10-23T12-03-05-0400_RangelineSMedicalDr_36h.saedump"
 export NUM_ANOMALIES=50
-export CAMERA="RangelineSMedicalDr"
+export CAMERA="RangelineS116thSt"
 export MODEL_ARCHITECTURE="MobileNet_v3"
 
 
@@ -33,7 +32,7 @@ for seconds in "${seconds_list[@]}"; do
         for weights in "${model_weights_list[@]}"; do
             export MODEL_WEIGHTS="models/${CAMERA}/${seconds}/${MODEL_ARCHITECTURE}_${distr}_prob/${weights}"
             export OUTPUT_DISTR="$distr"
-            export PATH_TEST_DATA="${path_test_data_start}/${CAMERA}/${seconds}/test/2024-10-23T12-03-05-0400_RangelineSMedicalDr_36h.pkl"
+            export PATH_TEST_DATA="${path_test_data_start}/${CAMERA}/${seconds}/test/"
 
             if [ ! -f "$MODEL_WEIGHTS" ]; then
                 echo "MODEL_WEIGHTS not found: $MODEL_WEIGHTS"
@@ -45,7 +44,7 @@ for seconds in "${seconds_list[@]}"; do
             echo "  PATH_TEST_DATA=$PATH_TEST_DATA"
             echo "  OUTPUT_DISTR=$OUTPUT_DISTR"
 
-            python3 movementpredictor/evaluation/eval_data.py
+            python3 movementpredictor/evaluation/eval_prep.py
 
             echo "--- Finished ---"
         done

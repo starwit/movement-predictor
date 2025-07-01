@@ -26,6 +26,7 @@ def setup_training(path_data, pixel_per_axis, architecture, output_prob, lr):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model_architectures.get_model(architecture=architecture, output_prob=output_prob)
     model = model.to(device)
+    model.train()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.25, patience=2, verbose=True, min_lr=lr * 0.25 * 0.25)
