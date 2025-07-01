@@ -8,7 +8,7 @@ import torch
 from typing import List, Optional
 from pydantic import BaseModel
 
-from visionapi.sae_pb2 import SaeMessage
+from visionapi.sae_pb2 import SaeMessage, VideoFrame
 from visionlib import saedump
 
 log = logging.getLogger(__name__)
@@ -24,42 +24,52 @@ class TrackedObjectPosition(BaseModel):
     movement_angle: Optional[float] = None 
 
 
-def get_downsampled_tensor_img(frame, pixel):
+def get_downsampled_tensor_img(frame: VideoFrame, pixel: int):
+    """
+    Decode a JPEG-encoded frame to a grayscale tensor, resize it, and normalize to [0, 1].
 
-        frame_data = frame.frame_data_jpeg
-        np_arr = np.frombuffer(frame_data, np.uint8)
-        img = cv2.imdecode(np_arr, cv2.IMREAD_GRAYSCALE)
-        resized_img = cv2.resize(img, (pixel, pixel), interpolation=cv2.INTER_AREA)
-        tensor_img = torch.from_numpy(resized_img).float() / 255.0
+    Args:
+        frame (VideoFrame): SAE meaaage's VideoFrame object with `frame_data_jpeg` attribute holding JPEG bytes.
+        pixel (int): The desired output height and width (square).
 
-        return tensor_img
+    Returns:
+        torch.Tensor: A 2D float32 tensor of shape (pixel, pixel), values in [0.0, 1.0].
+    """
+
+    frame_data = frame.frame_data_jpeg
+    np_arr = np.frombuffer(frame_data, np.uint8)
+    img = cv2.imdecode(np_arr, cv2.IMREAD_GRAYSCALE)
+    resized_img = cv2.resize(img, (pixel, pixel), interpolation=cv2.INTER_AREA)
+    tensor_img = torch.from_numpy(resized_img).float() / 255.0
+
+    return tensor_img
 
 
 def get_background_frame(path, pixel):
-        try:
-            tensor_img = None
+    try:
+        tensor_img = None
 
-            with open(path, 'r') as input_file:
-                messages = saedump.message_splitter(input_file)
+        with open(path, 'r') as input_file:
+            messages = saedump.message_splitter(input_file)
 
-                start_message = next(messages)
-                saedump.DumpMeta.model_validate_json(start_message)
+            start_message = next(messages)
+            saedump.DumpMeta.model_validate_json(start_message)
 
-                for count, message in enumerate(messages):
-                    event = saedump.Event.model_validate_json(message)
-                    proto_bytes = pybase64.standard_b64decode(event.data_b64)
+            for count, message in enumerate(messages):
+                event = saedump.Event.model_validate_json(message)
+                proto_bytes = pybase64.standard_b64decode(event.data_b64)
 
-                    proto = SaeMessage()
-                    proto.ParseFromString(proto_bytes)
+                proto = SaeMessage()
+                proto.ParseFromString(proto_bytes)
 
-                    tensor_img = get_downsampled_tensor_img(proto.frame, pixel)
-                    return tensor_img
+                tensor_img = get_downsampled_tensor_img(proto.frame, pixel)
+                return tensor_img
 
-        
-        except Exception as e:
+    
+    except Exception as e:
 
-            print(f"Error processing the file: {e}")
-            return None
+        print(f"Error processing the file: {e}")
+        return None
         
 
 def store_frame(frame: torch.Tensor, path_store):
@@ -72,10 +82,27 @@ def load_background_frame(path_store):
 
 class TrackingDataManager:
     border_threshold = None
-    #frame_rate = None
     start_timestamp = None
 
-    def getTrackedBaseData(self, path, inferencing=True) -> list[TrackedObjectPosition]:
+    def getTrackedBaseData(self, path, inferencing=True) -> List[TrackedObjectPosition]:
+        """
+        Read a SAE dump file and extract a flat list of tracked object positions.
+
+        This will:
+        1. Open the JSON-encoded SAE dump at `path`.
+        2. Parse its header to log which streams are present.
+        3. Iterate through every frame message, decode the protobuf,
+           and call `extract_tracked_objects` to accumulate `TrackedObjectPosition` entries.
+
+        Args:
+            path (str): Filesystem path to the `.saedump` file.
+            inferencing (bool): If True, applies border-cropping logic to exclude
+                detections too close to the frame edge, and excludes small bounding boxes.
+
+        Returns:
+            List[TrackedObjectPosition]: All tracked objects found in the dump, in
+            chronological order, or None if an error occurred.
+        """
         try:
             extracted_tracks = [] 
             with open(path, 'r') as input_file:
@@ -85,7 +112,6 @@ class TrackingDataManager:
                 start_message = next(messages)
                 dump_meta = saedump.DumpMeta.model_validate_json(start_message)
                 log.info(f'Starting playback from file {path} containing streams {dump_meta.recorded_streams}')
-                #frames_count = 0
                 
                 for message in tqdm(messages):
                     event = saedump.Event.model_validate_json(message)
@@ -93,17 +119,6 @@ class TrackingDataManager:
 
                     proto = SaeMessage()
                     proto.ParseFromString(proto_bytes)
-
-                    #if self.frame_rate is None:
-                     #   if self.start_timestamp is None:
-                      #      self.start_timestamp = proto.frame.timestamp_utc_ms
-                       # else:
-                        #    frames_count += 1
-                         #   if frames_count == 100:
-                          #      diff = proto.frame.timestamp_utc_ms - self.start_timestamp
-                           #     self.frame_rate = 1000*100/diff
-                            #    print("frame-rate=", self.frame_rate)
-                    
                     extracted_tracks = self.extract_tracked_objects(proto, extracted_tracks, inferencing)
 
             return extracted_tracks
@@ -111,10 +126,26 @@ class TrackingDataManager:
         except Exception as e:
 
             print(f"Error processing the file: {e}")
-            return None
+            exit(1)
 
 
-    def extract_tracked_objects(self, proto, extracted_tracks=[], inferencing=True):
+    def extract_tracked_objects(self, proto, extracted_tracks=[], inferencing=True) -> List[TrackedObjectPosition]:
+        """
+        From a single SAE message, filter and convert detections into TrackedObjectPosition.
+
+        Applies:
+        - Class filter (person, bicycle, car, motorcycle, bus, truck).
+        - Minimum bounding-box size.
+        - Optional border threshold to ignore partial detections at frame edges when inferencing.
+
+        Args:
+            proto (SaeMessage): Decoded protobuf message containing `frame` and `detections`.
+            extracted_tracks (List[TrackedObjectPosition]): Accumulated list to append to.
+            inferencing (bool): If True, skip any detection that overlaps the frame border and small boundingboxes.
+
+        Returns:
+            List[TrackedObjectPosition]: The same `extracted_tracks` list, extended with new positions for this frame.
+        """   
         if self.border_threshold is None:
             self._calc_frame_border_threshold(proto.frame)
 
