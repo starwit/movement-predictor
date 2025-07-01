@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 import json
 from typing import List
 from torch.utils.data import DataLoader
