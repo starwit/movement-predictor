@@ -1,5 +1,5 @@
 import logging
-from math import atan, degrees
+from math import atan, degrees, atan2
 from typing import Dict
 from movementpredictor.data.datamanagement import TrackedObjectPosition
 from tqdm import tqdm
@@ -59,7 +59,7 @@ class DataFilterer():
                 continue
 
             bboxes = [track.bbox for track in tracks_of_object]
-            smooth_bboxes, smooth_centers = DataFilterer._smooth_trajectory_median(bboxes)#, timestamps)
+            smooth_bboxes, smooth_centers = DataFilterer._smooth_trajectory_median(bboxes)
 
             for track, bbox, center in zip(tracks_of_object, smooth_bboxes, smooth_centers):
                 track.bbox = bbox
@@ -224,19 +224,12 @@ class DataFilterer():
 
     @staticmethod
     def _get_angle(center, previous_center) -> float:
+        """ Returns angle in degrees [0,360). """
         delta_x = center[0] - previous_center[0]
-        delta_y = (center[1] - previous_center[1]) * (-1)
-        if delta_x == 0 or delta_y == 0:
-            return -1
-
-        angle = degrees(atan(abs(delta_y) / abs(delta_x)))
-        if delta_x < 0 and delta_y >= 0:
-            angle = 180. - angle
-        elif delta_x >= 0 and delta_y < 0:
-            angle = 360. - angle
-        elif delta_x < 0 and delta_y < 0:
-            angle = 180. + angle
-
+        delta_y = (center[1] - previous_center[1]) * -1
+        
+        raw = atan2(delta_y, delta_x)  # returns value in [-pi, pi]
+        angle = (degrees(raw) + 360.0) % 360.0
         return angle
 
 

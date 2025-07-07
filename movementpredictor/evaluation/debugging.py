@@ -14,6 +14,7 @@ evalconfig = EvalConfig()
 #path_label_box_with_labels = os.path.join(evalconfig.path_label_box, "RangelineSMedicalDr_1-3-5-10")
 #list_ids_with_labels = os.listdir(path_label_box_with_labels)
 
+print(evalconfig.camera)
 path_label_box = os.path.join(evalconfig.path_label_box, evalconfig.camera)
 redo_video = defaultdict()
 all_event_labels = []
@@ -49,7 +50,7 @@ for entry in os.listdir(path_label_box):
         #with open(path_label, "w", encoding="utf-8") as json_file:
          #   json.dump(labeldata, json_file, indent=4)
 
-        if labeldata["label"] == 22:
+        if labeldata["label"] == 21:
             #shutil.rmtree(full_path)
             print(labeldata["obj_id"])
 
