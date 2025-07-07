@@ -123,6 +123,7 @@ def create_video(anomaly_dict: Dict[str, List[int]], path_sae_dumps: str, path_s
                             break
                     video_dict[key].append(frame_info)
     
+    print("check")
     for key in video_dict:
         path = os.path.join(path_store, key[0])
         store_frames_and_bboxs(video_dict[key], path)

@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 evalconfig = EvalConfig()
 
 
-def store_predictions(predicted_anomalies: List[InferenceResult], path_folder, model_path, num_anomalies, num_anomal_frames_per_trajectory="3", thr_dist=None):
+def store_predictions(predicted_anomalies: List[InferenceResult], path_folder, model_path, num_anomalies, num_anomal_frames_per_trajectory=None, thr_dist=None):
     model_name = make_combined_name(model_path, num_anomal_frames_per_trajectory)
     path_prediction_json = os.path.join(path_folder, model_name + ".json") if thr_dist is not None else os.path.join(path_folder, model_name + "_all_labeled_data.json") 
     os.makedirs(path_folder, exist_ok=True)
@@ -57,7 +57,8 @@ def make_combined_name(path: str, num_frames) -> str:
     folder = os.path.basename(os.path.dirname(path))
     parent_folder = os.path.basename(os.path.dirname(os.path.dirname(path)))
     filename_without_ext = os.path.splitext(os.path.basename(path))[0]
-    return f"{parent_folder}_{folder}_{filename_without_ext}_len{num_frames}"
+    name = f"{parent_folder}_{folder}_{filename_without_ext}"
+    return f"{name}_len{num_frames}" if num_frames is not None else name
 
 
 def main():

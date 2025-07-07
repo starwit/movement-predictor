@@ -20,7 +20,7 @@ def ndcg_curve(trajectories_of_all_runs: List[List[evaluation_helper.PredictedTr
     curve_std = []
     rels = evaluation_helper.get_rels(all_group_labels)
 
-    max_min_length = 50 if scoring == "min" or scoring == "" else 80
+    max_min_length = 50 if scoring == "min_exc" or scoring == "" else 240
     max_ndcg, max_ndcg_std, min_length = 0, 0, 0
 
     for i in range(max_min_length):
@@ -54,7 +54,7 @@ def ndcg_curve_percentil(trajectories_of_all_runs: List[List[evaluation_helper.P
     rels = evaluation_helper.get_rels(all_group_labels)
 
     max_ndcg, max_ndcg_std, best_percentil = 0, 0, 0
-    percentils = np.linspace(50, 99, 50)
+    percentils = np.round(np.linspace(0.01, 0.99, 99), 2)
 
     for percentil in percentils:
         ndcg_mean, ndcg_std = ndcg_mean_and_std_percentil(trajectories_of_all_runs, percentil, all_ids, all_group_labels, scoring, rels, k=k)
@@ -86,7 +86,7 @@ def ndcg_curve_exp_weighted_avg(trajectories_of_all_runs: List[List[evaluation_h
     curve_std = []
     rels = evaluation_helper.get_rels(all_group_labels)
     max_ndcg, max_ndcg_std, best_param = 0, 0, 0
-    weight_params = np.linspace(0.01, 1.2, 120)
+    weight_params = np.linspace(0.01, 1.5, 150)
 
     for weight_param in weight_params:
         ndcg_mean, ndcg_std = ndcg_mean_and_std_full_tr_scoring(trajectories_of_all_runs, all_ids, all_group_labels, scoring="exp-weighted-avg", rels=rels, k=k, weight_param=weight_param)
@@ -187,7 +187,7 @@ def ndcg_mean_and_std_percentil(trajectories_of_all_runs: List[List[evaluation_h
                                       scoring: str, rels: List[int], k=50):
     ndcgs = []
     for trajectories in trajectories_of_all_runs:
-        scores = evaluation_helper.get_scores_percentile(trajectories, percentil, all_ids, all_group_labels, scoring)
+        scores = evaluation_helper.get_scores_top_k(trajectories, percentil, all_ids, all_group_labels, scoring)
         ndcgs.append(ndcg_score([np.array(rels)], [np.array(scores)], k=k))
 
     mean = np.mean(np.array(ndcgs))

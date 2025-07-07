@@ -13,10 +13,10 @@ evalconfig = EvalConfig()
 
 groups = {      
     0 : [-1],                 # tracking or detection mistake
-    1 : [0, 1, 4],                 # false positive or uninteresting 
-    2 : [2, 3, 6, 8, 15, 17, 27, 31],               # rather uninteresting anomaly
-    3 : [5, 7, 10, 12, 16, 26, 29, 30],                # interesting anomaly
-    4 : [9, 11, 14, 18, 21, 24],                                                     # highly interesting anomaly
+    1 : [0, 1],                 # false positive or uninteresting 
+    2 : [2, 3, 4, 6, 8, 15, 17, 27],               # rather uninteresting anomaly
+    3 : [5, 7, 10, 12, 16, 24, 26, 30],                # interesting anomaly
+    4 : [9, 11, 14, 18, 21, 29, 31],                           # highly interesting anomaly
     5 : [13, 19, 20, 22, 23, 25, 28, 32]                 # dangerous behaviour
 }
 
@@ -109,7 +109,7 @@ def get_y_true(all_group_labels: List[int]):
     return [group_label for group_label in all_group_labels if group_label != 0]
 
 
-#def get_rels(all_group_labels: List[int], exp_relevance: bool):
+#def get_rels(all_group_labels: List[int], exp_relevance: bool = True):
  #   return [2**max(0, anomaly_group - 1) -1 if exp_relevance else max(0, anomaly_group - 1) for anomaly_group in get_y_true(all_group_labels)]
 
 def get_rels(all_group_labels: List[int]):
@@ -118,7 +118,6 @@ def get_rels(all_group_labels: List[int]):
 
 def get_scores_num_trajectories_based(trajectories: List[PredictedTrajectory], num_anomaly_trajectories: int, min_num_anomaly_frames: int, all_ids: List[str], all_group_labels: List[int],
                weight_length: float = 0.5):
-    ''' scoring: calculation method for the score - 'avg', 'min', 'weighted-sum' or 'med' '''
     scores = []
     threshold, top_k_ids = calculate_threshold(trajectories, num_anomaly_trajectories, min_num_anomaly_frames)
     detections: List[PredictedTrajectory] = []
@@ -149,6 +148,7 @@ def get_scores_num_trajectories_based(trajectories: List[PredictedTrajectory], n
 
 def score_trajectory(trajectory: PredictedTrajectory, scoring: str = "weighted-avg", exp_para=None):
     sorted_measures = sorted(trajectory.measures, reverse=True)
+    #sorted_measures = sorted_measures[:min(len(sorted_measures), 50)]
 
     if scoring == "avg":
         score = np.mean(np.array(sorted_measures))
@@ -183,7 +183,6 @@ def score_trajectory(trajectory: PredictedTrajectory, scoring: str = "weighted-a
 
 
 def get_scores_full_trajectory(trajectories: List[PredictedTrajectory], all_ids: List[str], all_group_labels: List[int], scoring: str = "weighted-avg", exp_para=None):
-    ''' scoring: calculation method for the score - 'avg', 'min', 'weighted-sum' or 'med' '''
     scores = []
     traj_map = {t.obj_id: t for t in trajectories}
 
@@ -209,8 +208,8 @@ def get_scores_full_trajectory(trajectories: List[PredictedTrajectory], all_ids:
 
 
 def get_scores_top_k(trajectories: List[PredictedTrajectory], min_num_anomaly_frames: int, all_ids: List[str], all_group_labels: List[int],
-               scoring: str = "min", remove_undetected = False):
-    ''' scoring: calculation method for the score - 'avg', 'min', 'weighted-sum' or 'med' '''
+               scoring: str = "avg", remove_undetected = False):
+    ''' scoring: calculation method for the score - 'avg', 'min', 'weighted-avg' or 'med' '''
     scores = []
     traj_map = {t.obj_id: t for t in trajectories}
 
@@ -224,25 +223,55 @@ def get_scores_top_k(trajectories: List[PredictedTrajectory], min_num_anomaly_fr
                 continue
             scores.append(0)
 
-        elif len(traj_map[car_id].measures) < min_num_anomaly_frames:
-            log.debug("not enough predictions for " + car_id + ": " + str(traj_map[car_id].measures))
-            if remove_undetected:
-                continue
-            scores.append(0)
+        #elif len(traj_map[car_id].measures) < min_num_anomaly_frames:
+         #   log.debug("not enough predictions for " + car_id + ": " + str(traj_map[car_id].measures))
+          #  if remove_undetected:
+           #     continue
+            #scores.append(0)
 
         else:
             sorted_measures = sorted(traj_map[car_id].measures, reverse=True)
-            if scoring == "min":
-                score = sorted_measures[min_num_anomaly_frames - 1]
+            cut_off = min_num_anomaly_frames if min_num_anomaly_frames >= 1 else max(1, round(min_num_anomaly_frames*len(sorted_measures)))
+
+            if scoring == "min-exc":
+                if len(traj_map[car_id].measures) < cut_off:
+                    log.debug("not enough predictions for " + car_id + ": " + str(traj_map[car_id].measures))
+                    if remove_undetected:
+                        continue
+                    score = 0
+                else:
+                    score = sorted_measures[cut_off - 1]
+            
+            elif scoring == "min-inc":
+                score = sorted_measures[min(cut_off, len(sorted_measures)) - 1]
+
             elif scoring == "avg":
-                score = np.mean(np.array(sorted_measures[:min_num_anomaly_frames]))
+                score = np.mean(np.array(sorted_measures[:min(cut_off, len(sorted_measures))]))
+            
             elif scoring == "med":
-                score = np.median(np.array(sorted_measures[:min_num_anomaly_frames]))
-            elif scoring == "weighted-sum":
-                sorted_measures = np.array(sorted_measures[:min_num_anomaly_frames])
+                score = np.median(np.array(sorted_measures[:min(cut_off, len(sorted_measures))]))
+                
+            elif scoring == "weighted-avg":
+                sorted_measures = np.array(sorted_measures[:min(cut_off, len(sorted_measures))])
                 score = 0
+                sum_weights = 0
+                length_trajectory = len(sorted_measures)
                 for rank, measure in enumerate(sorted_measures):
-                    score += measure*(min_num_anomaly_frames-rank)/min_num_anomaly_frames
+                    weight = (length_trajectory-rank)/length_trajectory
+                    score += (measure*weight)
+                    sum_weights += weight
+                score = score/sum_weights
+
+            elif scoring == "exp-weighted-avg":
+                sorted_measures = np.array(sorted_measures[:min(cut_off, len(sorted_measures))])
+                score = 0
+                sum_weights = 0
+                for rank, measure in enumerate(sorted_measures):
+                    weight = (0.95)**rank
+                    score += (measure*weight)
+                    sum_weights += weight
+                score = score/sum_weights
+
             else:
                 log.error("scoring has to be min, avg, weighted-sum or med")
                 exit(1)

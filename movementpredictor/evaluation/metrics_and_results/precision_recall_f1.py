@@ -137,8 +137,8 @@ def PR_AUCs(trajectories_of_all_runs: List[List[evaluation_helper.PredictedTraje
 def mean_and_variance_PR_curve(trajectories_of_all_runs: List[List[evaluation_helper.PredictedTrajectory]], model_name: str, good_class_start: int,
                                weight_param: float, all_ids: List[str], all_group_labels: List[int], scoring: str, show: bool = False):
     pr_curves: List[np.array] = []
-    for trajectory in trajectories_of_all_runs:
-        precision, recall, _, _ = calculate_PR_curve(trajectory, good_class_start, weight_param, all_ids, all_group_labels, scoring)
+    for trajectories in trajectories_of_all_runs:
+        precision, recall, _, _ = calculate_PR_curve(trajectories, good_class_start, weight_param, all_ids, all_group_labels, scoring)
         curve = list(zip(recall, precision))
         pr_curves.append(np.array(curve))
     
