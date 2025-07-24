@@ -56,6 +56,8 @@ def get_background_frame(path, pixel):
             saedump.DumpMeta.model_validate_json(start_message)
 
             for count, message in enumerate(messages):
+                if count < 32:
+                    continue
                 event = saedump.Event.model_validate_json(message)
                 proto_bytes = pybase64.standard_b64decode(event.data_b64)
 

@@ -2,63 +2,93 @@
 
 ## Description
 
-The new anomaly detection approach not only detects anomalies based on the path a vehicle takes but also based on a vehicles velocity and on the traffic. The method uses information of all the vehicles in a scene and is able to detect vehicles that ignore the right of way or are too careful at crossings (wait too long).
-
-Through a dynamic clustering algorithm it should further be possible to give human feedback to the anomalies at runtime and to classify the anomalies, e.g.: not interesting/not harmful/critical/dangerous behavior. The now labeled anomalies will be clustered.
-When a new anomaly is detected it will be checked whether is can be put in an existing cluster of similar anomalies or when it is too different from other stored anomalies it will be asked for human feedback/classification.
-
-A visualisation of the preliminary approach can be seen in docs/ApproachVisualization.pdf.
-![Approach Visualization](docs/ApproachVisualization.pdf)
+This project detects anomalies in vehicle behavior not only by path deviations but also by velocity and traffic context. It leverages all vehicles in a scene to spot right-of-way violations or overly cautious waiting. Detected anomalies can be clustered at runtime with human feedback into categories (e.g. “not interesting”, “critical”, “dangerous”). A visualization of the approach is in `docs/ApproachVisualization.pdf`.
 
 ## Prerequisites
 
-- python 3.11
-- Virtual env (e.g. sudo apt install python3.11-venv)
-- Install Poetry
+- Python 3.10  
+- Virtual env (e.g. sudo apt install python3.10-venv) 
+- Poetry  
 
 ## Setup
 
-- Create virtual environment with 'python3 -m venv .venv && source .venv/bin/activate'
-- Run 'poetry install', this should install all necessary dependencies
-- Run one of the three main methods of the project (e.g. python3 movementpredictor/data/main_data.py) see [Usage](#usage)
+```bash
+git clone <repo-url>
+cd <repo>
+python3 -m venv .venv
+source .venv/bin/activate
+poetry install
+```
 
 ## Usage
 
-The repository can be used for 3 separated steps: 
-- the preparation of datasets based on the data provided by the sae (movementpredictor/data)
-  - you need to store the main sae data as a file of type '.saedump' and provide the file's path in the '.env' variable 'PATH_SAE_DATA_TEST' and then run 'main_data.py' (the generated datasts will be stored in movementpredictor/data/datasets/CAMERA/NAME_DATA)
-  - provide your test dataset similarly and then run 'main_test_data.py'
-  - necessary program input: 'PATH_SAE_DATA_TRAIN' and 'PATH_SAE_DATA_TEST' including the saedump paths for training and validation; 'TIME_DIFF_PREDICTION' to specify how many seconds ahead the vehicle's position will be predicted; 'CAMERA' and 'NAME_DATA' to store the data in fitting folders; and 'PIXEL_PER_AXIS' to provide the frame resolution
-- the training of the movement-prediction convolutional neural network (movementpredictor/cnn)
-  - train the model by running 'main_training.py'
-  - necessary program input: all environment variables to store everything for successful later inferencing, most importantly:
-    -  'MODEL_ARCHITECTURE' (the model architecture that should be used)
-    -  'OUTPUT_DISTR' (the type of gaussian output distribution: 'symmetric' or 'aymmetric')
-    -  'PIXEL_PER_AXIS' to spezify the input image size
-    -  'CAMERA', 'NAME_DATA' (Camera from which the data originates -> data should be stored at movementpredictor/data/datasets/CAMERA/NAME_DATA)
-  -  the model will be stored at models/CAMERA/NAME_MODEL (model weights and all parameters necessary to use the model for inferencing)
-- calculation of parameters for the anomaly detection (movementpredictor/anomalydetection) 
-  - you can use the trained CNN to make predictions on huge datasets
-  - based on all outputs a probability threshold is calculated so that 'PERCENTAGE_OF_ANOMALIES' percent of all samples are considered as normal
-  - the treshold will be stored in the same location as the model weights in parameters.json
-  - future work: these anomalies should be further clustered
-  - necessary program input:
-    - 'CAMERA', 'OUTPUT_DISTR', 'MODEL_ARCHITECTURE', 'NAME_DATA' - to get the trained weights, data and to store parameters like the threshold
-    - 'PERCENTAGE_OF_ANOMALIES'
-    - if you want to generate videos of found anomalies you need 'PATH_SAE_DATA'
+Example parameter values are provided in `movementpredictor/.env.template`. To run the full pipeline—or any subset of its steps—follow these instructions:
+
+1. **Configure**  
+   Create a `.env` in the project root (or copy `movementpredictor/.env.template`) and fill in your paths and parameters. In particular, set:
+   - `PATH_SAE_DATA_TRAIN`, `PATH_SAE_DATA_TEST` (SAE-dump files for training & validation)  
+   - `TIME_DIFF_PREDICTION` (seconds ahead to predict)  
+   - `CAMERA`, `NAME_DATA` (used to name output folders)  
+   - `PIXEL_PER_AXIS` (frame resolution)  
+   - `MODEL_ARCHITECTURE`, `OUTPUT_DISTR` (e.g. “asymmetric”)  
+   - `PERCENTAGE_OF_ANOMALIES` (e.g. 99.95)  
+   - `COMPUTE_STEPS` (comma-separated subset of `prepare,train,threshold`)  
+   - etc.
+
+2. **Run the pipeline**  
+   ```bash
+   python3 movementpredictor/main.py
+   ```
+
+By default, all three stages run in order (`prepare`, `train`, `threshold`).
+If the .env Parameter `VISUALIZE` is set, plots and videos of found anomalies during the last stage are stored in folder `plots/<CAMERA>/<NAME_DATA>/…`. Frames are needed for this, so only set `VISUALIZE=True` if your sae-dumps contain frames. 
+
+### Select individual stages
+
+Adjust the `COMPUTE_STEPS` env var to run only the steps you need:
+
+| Step         | What it does                                                                                                                |
+|--------------|-----------------------------------------------------------------------------------------------------------------------------|
+| **prepare**   | Builds the train & test datasets from the SAE-dump files.                                                                  |
+| **train**     | Trains the movement-prediction CNN and saves model weights and parameters.                                                                |
+| **threshold** | Runs inference on the test set to compute the anomaly threshold so that `PERCENTAGE_OF_ANOMALIES` % are normal; saved alongside the model.|
+
+
+_Example:_ To only prepare data and train the model, set:
+
+```dotenv
+COMPUTE_STEPS="prepare,train"
+```
+
+## Outputs
+
+After running, you’ll find:
+
+- **Datasets** under  
+  `movementpredictor/data/datasets/<CAMERA>/<NAME_DATA>/…`
+
+- **Model & parameters** under  
+  `models/<CAMERA>/<NAME_DATA>/…` (weights + `parameters.json`)
+
+- **Anomaly threshold** in the same folder as the model, added to the `parameters.json`
+  
+- **plots & Videos** under `plots/<CAMERA>/<NAME_DATA>/…` if the .env Parameter `VISUALIZE` is set
+
+All steps share the same configuration and folder conventions, making it easy to automate or integrate into larger workflows.
+
   
 ## Library Usage
 
-After performing the 3 setup steps the movement predictor anomaly detection is ready to be used. All necessary functions and Classes can be imported like 'from movementpredictor import ...'. To perform inferencing and extraction of anomalies the recommended workflow is the following: 
-- extract sae data with 'TrackingDataManager'
-- smooth and filter the tracks with 'DataFilterer.apply_filtering'
-- generate the dataset with 'makeTorchDataLoader' 
+After performing the 3 setup steps the movement predictor anomaly detection is ready to be used. All necessary functions and classes can be imported via 'from movementpredictor import ...'. To perform inferencing and extraction of anomalies the recommended workflow is the following: 
+- extract sae data with `TrackingDataManager`
+- smooth and filter the tracks with `DataFilterer.apply_filtering`
+- generate the dataset with `makeTorchDataLoader` 
 - load the model: 
-  - 'import torch'
-  - 'from movementpredictor.cnn import model_architectures'
-  - 'model = model_architectures.get_model(architecture="MobileNet_v3", output_prob="asymmetric", path_model="path-to-your-model-weights.pth")'
-- inferencing with 'inference_with_stats'
-- extract anomalies with 'get_meaningful_unlikely_samples'
+  - `import torch`
+  - `from movementpredictor.cnn import model_architectures`
+  - `model = model_architectures.get_model(architecture="MobileNet_v3", output_prob="asymmetric", path_model="path-to-your-model-weights.pth")`
+- inferencing with `inference_with_stats`
+- extract anomalies with `get_meaningful_unlikely_samples`
 
 ## Github Workflows and Versioning
 

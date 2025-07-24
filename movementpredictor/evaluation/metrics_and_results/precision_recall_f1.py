@@ -105,7 +105,7 @@ def PR_AUCs(trajectories_of_all_runs: List[List[evaluation_helper.PredictedTraje
             all_ids: List[str], all_group_labels: List[int], scoring: str, show: bool = False):
     aucs = []
     aucs_std = []
-    max_min_anomaly_frames = 50 if scoring == "min" else 80
+    max_min_anomaly_frames = 50 if scoring == "min-exc" else 250
 
     for i in range(max_min_anomaly_frames):
         aucs_temp = []
