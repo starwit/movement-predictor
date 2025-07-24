@@ -20,7 +20,7 @@ def ndcg_curve(trajectories_of_all_runs: List[List[evaluation_helper.PredictedTr
     curve_std = []
     rels = evaluation_helper.get_rels(all_group_labels)
 
-    max_min_length = 50 if scoring == "min_exc" or scoring == "" else 240
+    max_min_length = 50 if scoring == "min-exc" or scoring == "" else 250
     max_ndcg, max_ndcg_std, min_length = 0, 0, 0
 
     for i in range(max_min_length):
@@ -197,6 +197,60 @@ def ndcg_mean_and_std_percentil(trajectories_of_all_runs: List[List[evaluation_h
 
 
 
-def macro_ndcg(all_rels, all_scores, all_event_labels, k=50):
-    ...
-    # ist dumm, aber etwas, das klassenimbalance berücksichtigt wird benötigt
+def ndcg_class_imbalance_top_k(trajectories_of_all_runs: List[List[evaluation_helper.PredictedTrajectory]], all_ids: List[str], all_group_labels: List[int], 
+                min_num_anomaly_frames: int, all_event_labels: List[int], scoring: str, k=50):
+    
+    macro_ndcg = []
+    for trajectories in trajectories_of_all_runs:
+
+        scores = evaluation_helper.get_scores_top_k(trajectories, min_num_anomaly_frames, all_ids, all_group_labels, scoring)
+        sum_ndcg_temp = 0
+
+        for event in range(1, 33):
+                if event not in all_event_labels:
+                    continue
+
+                rels_per_event = [1 if label == event else 0 for label in all_event_labels if label not in evaluation_helper.groups[0]]
+                weight = next(k for k, lst in evaluation_helper.groups.items() if event in lst)
+                ndcg = ndcg_score([np.array(rels_per_event)], [np.array(scores)], k=k)
+                sum_ndcg_temp += ndcg* (2**max(0, weight - 1) -1)
+
+        macro_ndcg.append(sum_ndcg_temp)
+
+    mean = np.mean(np.array(macro_ndcg))
+    std = np.std(np.array(macro_ndcg))
+
+    return mean, std
+
+
+def ndcg_curve_class_imbalance(trajectories_of_all_runs: List[List[evaluation_helper.PredictedTrajectory]], model_name: str, all_ids: List[str], 
+              all_group_labels: List[int], all_event_labels: List[int], scoring: str, k=50):
+    
+    curve_mean = []
+    curve_std = []
+    
+    max_min_length = 50 if scoring == "min_exc" or scoring == "" else 240
+    max_ndcg, max_ndcg_std, min_length = 0, 0, 0
+
+    for i in range(max_min_length):
+        ndcg_mean, ndcg_std = ndcg_class_imbalance_top_k(trajectories_of_all_runs, all_ids, all_group_labels, i+1, all_event_labels, scoring, k=k)
+        curve_mean.append(ndcg_mean)
+        curve_std.append(ndcg_std)
+
+        if ndcg_mean > max_ndcg:
+            max_ndcg = ndcg_mean
+            max_ndcg_std = ndcg_std
+            min_length = i
+    
+    curve_mean = np.array(curve_mean)
+    curve_std = np.array(curve_std)
+    plt.plot(range(1, max_min_length+1), curve_mean, label=model_name)
+    plt.fill_between(range(1, max_min_length+1), curve_mean-0.5*curve_std, curve_mean+0.5*curve_std, alpha=0.3)
+    
+    plt.xlabel('min length of anomal trajectory')
+    plt.ylabel('NDCG')
+    plt.title("NDCG Curve")
+    plt.legend()
+    plt.grid(True)
+    
+    return max_ndcg, max_ndcg_std, min_length

@@ -57,6 +57,7 @@ class GroupHistogram:
             std_hist  = hists.std(axis=0)
 
             x = np.arange(self.n_bins)
+
             ax.bar(x, mean_hist, color=self.colors, edgecolor='black', label='_nolegend_')
             ax.errorbar(x, mean_hist, yerr=std_hist, fmt='none', ecolor='black', capsize=3)
 

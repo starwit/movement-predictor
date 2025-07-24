@@ -50,7 +50,7 @@ def getTorchDataLoader(dataset, shuffle=True):
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=False)
 
 
-def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], time_diff_prediction=2, frame_rate=10, pixel_per_axis=120) -> DataLoader:
+def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], class_of_interest=2, time_diff_prediction=2, frame_rate=10, pixel_per_axis=120) -> DataLoader:
     """
     Creates a pytorch DataLoader to make the data progressible for pytorch deep learning models.
     Based on the tracking information the model's input (boundingboxes, movement_angles) 
@@ -64,7 +64,7 @@ def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], time_dif
         DataLoader: pytorch Dataloader to make easy use of the dataset in batches
 
     """
-    raw_dataset = make_input_target_pairs(tracks, time_diff_prediction, frame_rate)
+    raw_dataset = make_input_target_pairs(tracks, class_of_interest, time_diff_prediction, frame_rate)
     if len(raw_dataset) == 0:
         return None
     torch_dataset = CNNData(raw_dataset, pixel_per_axis)
@@ -72,8 +72,8 @@ def makeTorchDataLoader(tracks: Dict[str, list[TrackedObjectPosition]], time_dif
     return torch_dataloader
 
 
-def store_data(tracks: dict, path_store, time_diff_prediction, folder="test", frame_rate=10, name_dump=None):
-    dataset = make_input_target_pairs(tracks, time_diff_prediction, frame_rate)
+def store_data(tracks: dict, class_of_interest: int, path_store: str, time_diff_prediction: float, folder="test", frame_rate=10, name_dump=None):
+    dataset = make_input_target_pairs(tracks, class_of_interest, time_diff_prediction, frame_rate)
 
     path = os.path.join(path_store, folder)
     os.makedirs(path, exist_ok=True)
@@ -88,7 +88,7 @@ def store_data(tracks: dict, path_store, time_diff_prediction, folder="test", fr
         pickle.dump(dataset, f)
 
 
-def make_input_target_pairs(tracks: dict, time_diff_prediction: float, frame_rate: float = 10) -> Dataset:
+def make_input_target_pairs(tracks: dict, class_of_interest: int, time_diff_prediction: float, frame_rate: float = 10) -> Dataset:
     time_interval_in_millisec = 1100*time_diff_prediction
     prediction_step = 1000*time_diff_prediction
     input_target_pairs = []
@@ -99,8 +99,8 @@ def make_input_target_pairs(tracks: dict, time_diff_prediction: float, frame_rat
         if len(trajectory) == 0:
             continue
 
-        cars = [input_tr.class_id == 2 for input_tr in trajectory]
-        if sum(cars) / len(cars) > 0.8:      # only examine vehicles that are at least 80% classified as a car -> high probability of actually being a car
+        objects_of_interest = [input_tr.class_id == class_of_interest for input_tr in trajectory]
+        if sum(objects_of_interest) / len(objects_of_interest) > 0.8:      # only examine vehicles that are at least 80% classified as a the class_id of interest -> high probability of actually being of this class
 
             for i, input_tr in enumerate(trajectory):
                 if i + estimated_frames >= len(trajectory):
@@ -210,6 +210,45 @@ def plotDataSamples(dataloader: DataLoader, amount: int, path: str, frame: torch
         parent_path = os.path.dirname(path)
         plt.savefig(os.path.join(parent_path, "exampleInput" + str(count) + ".png"))
         plt.close()
+
+    
+def plotMasksOnly(dataloader, amount: int, path: str):
+    for count, (sample_batch, target_batch, _, _) in enumerate(dataloader):
+        if count >= amount:
+            break
+
+        sample = sample_batch[0]
+
+        m_others_sin     = sample[0].cpu().numpy()
+        m_others_cos     = sample[1].cpu().numpy()
+        m_interest_sin   = sample[-2].cpu().numpy()
+        m_interest_cos   = sample[-1].cpu().numpy()
+
+        fig, axes = plt.subplots(2, 2, figsize=(6, 6))
+
+        axes[0, 0].imshow(m_others_sin, cmap='gray', interpolation='nearest', vmin=-1, vmax=1)
+        axes[0, 0].set_title(r'Context channel$_\sin$')
+        axes[0, 0].axis('off')
+
+        axes[0, 1].imshow(m_others_cos, cmap='gray', interpolation='nearest', vmin=-1, vmax=1)
+        axes[0, 1].set_title(r'Context channel$_\cos$')
+        axes[0, 1].axis('off')
+
+        axes[1, 0].imshow(m_interest_sin, cmap='gray', interpolation='nearest', vmin=-1, vmax=1)
+        axes[1, 0].set_title(r'Target Vehicle channel$_\sin$')
+        axes[1, 0].axis('off')
+
+        axes[1, 1].imshow(m_interest_cos, cmap='gray', interpolation='nearest', vmin=-1, vmax=1)
+        axes[1, 1].set_title(r'Target Vehicle channel$_\cos$')
+        axes[1, 1].axis('off')
+
+        plt.tight_layout()
+
+        # speichern
+        parent = os.path.dirname(path)
+        out_fn = os.path.join(parent, f"maskOnly_{count}.png")
+        fig.savefig(out_fn, bbox_inches='tight', pad_inches=0)
+        plt.close(fig)
 
 
 def bbox_mask(pixel, bbox, scale):

@@ -49,16 +49,41 @@ for model_name in model_names:
     hg.plot_per_method(evalconfig.path_store_anomalies, model_name)
 
 
-'''CREATION OF NDCG-CURVES PLOT'''
+'''CREATION OF NDCG-CURVES PLOTS'''
 path_store_plot = os.path.join("movementpredictor/evaluation/plots", evalconfig.camera)
 os.makedirs(path_store_plot, exist_ok=True)
 
 
 # TOP-K SCORING
 print("------------------ SCORING BASED ON TOP-K ANOMALY POINTS PER TRAJECTORY ---------------------\n")
+'''
 for num_trajectories in [50]:
     print("TOP ", num_trajectories, "ANOMALIES")
     for scoring in ["min-exc", "min-inc", "med", "avg", "weighted-avg"]: #"exp-weighted-avg"]:
+
+        plt.figure(figsize=(10, 6))
+        for i, model_name in enumerate(model_names):
+            if model_name == "nearest_neighbor_analysis" and scoring != "min-exc" and scoring != "min-inc" and scoring != "med":
+                continue
+            path_list_predictions = evaluation_helper.find_matching_files(evalconfig.path_store_anomalies, model_name)
+
+            trajectories_of_all_runs = []
+            for path in path_list_predictions:
+                trajectories_of_all_runs.append(evaluation_helper.get_trajectories(path))
+
+            max_dcg, max_dcg_std, min_length = dcg_and_ndcg.ndcg_curve_class_imbalance(trajectories_of_all_runs, model_name, all_ids, all_group_labels, 
+                                                                                       all_event_labels, scoring, k=num_trajectories)
+            print(model_name + " - balanced - " + scoring + ": \tmax sum balanced NDCG Score at ", min_length, ": ", max_dcg, " (std: ", max_dcg_std, ")")
+        
+        plt.savefig(os.path.join(path_store_plot, "ndcg-curve-balanced-top-" + str(num_trajectories) + "anomalies-" + scoring + ".png"))
+        plt.show()
+        plt.close()
+    print()
+'''
+
+for num_trajectories in [50]:
+    print("TOP ", num_trajectories, "ANOMALIES")
+    for scoring in ["min-exc", "med", "avg", "weighted-avg"]: #"exp-weighted-avg"]:
 
         plt.figure(figsize=(10, 6))
         for i, model_name in enumerate(model_names):
@@ -82,7 +107,7 @@ for num_trajectories in [50]:
 
 print("------------------ SCORING BASED ON TOP-PERCENTIL ANOMALY POINTS PER TRAJECTORY ---------------------\n")
 #for num_trajectories in [20, 50]:
-for scoring in ["min-inc", "med", "avg", "weighted-avg", "exp-weighted-avg"]:
+for scoring in ["min-exc", "med", "avg", "weighted-avg", "exp-weighted-avg"]:
 
     plt.figure(figsize=(10, 6))
     for i, model_name in enumerate(model_names):
@@ -102,7 +127,6 @@ for scoring in ["min-inc", "med", "avg", "weighted-avg", "exp-weighted-avg"]:
 print()
 
 
-exit(0)
 # SCORING BASED ON WHOLE TRAJECTORY
 print("------------------ SCORING BASED ON WHOLE TRAJECTORY ---------------------\n")
 for num_trajectories in [50]:
@@ -161,6 +185,21 @@ for num_trajectories in [50]:
 '''CREATION OF PR-CURVES PLOT'''
 plt.figure(figsize=(10, 6))
 print("----------------------- AUC PR -----------------------")
+for scoring in ["min-exc", "avg"]:
+    for start_class in [2, 3, 4, 5]:
+        plt.figure(figsize=(10, 6))
+
+        for i, model_name in enumerate(model_names):
+            path_list_predictions = evaluation_helper.find_matching_files(evalconfig.path_store_anomalies, model_name)
+
+            trajectories_of_all_runs = []
+            for path in path_list_predictions:
+                trajectories_of_all_runs.append(evaluation_helper.get_trajectories(path))
+
+            precision_recall_f1.PR_AUCs(trajectories_of_all_runs, model_name, start_class, all_ids, all_group_labels, scoring=scoring, show=i==len(model_names)-1)
+
+
+exit(0)
 
 #for event_of_interest in [22, 18, 11, 12, 16]:
 for good_class_start in [2, 3, 4, 5]:
@@ -178,7 +217,7 @@ for good_class_start in [2, 3, 4, 5]:
         print(model_name + " - positives starting at class ", good_class_start, ": \tAUC PR = ", auc, " (std: ", std_auc, ")")
 print()
 
-for scoring in ["min-inc", "med"]:
+for scoring in ["min-exc", "avg"]:
     for start_class in [2, 3, 4, 5]:
         plt.figure(figsize=(10, 6))
 
@@ -196,17 +235,4 @@ for scoring in ["min-inc", "med"]:
             print("Max F1 Score at threshold ", round(threshold, 3), " (+/-", round(threshold_std, 3), ") with mind. ", min_anomaly_frames, " frames: ", round(max_f1, 3), " (+/-", round(max_f1_std, 3), ")\n")
 
 
-
-for scoring in ["min-inc", "med"]:
-    for start_class in [2, 3, 4, 5]:
-        plt.figure(figsize=(10, 6))
-
-        for i, model_name in enumerate(model_names):
-            path_list_predictions = evaluation_helper.find_matching_files(evalconfig.path_store_anomalies, model_name)
-
-            trajectories_of_all_runs = []
-            for path in path_list_predictions:
-                trajectories_of_all_runs.append(evaluation_helper.get_trajectories(path))
-
-            precision_recall_f1.PR_AUCs(trajectories_of_all_runs, model_name, start_class, all_ids, all_group_labels, scoring=scoring, show=i==len(model_names)-1)
 
