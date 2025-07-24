@@ -1,6 +1,6 @@
 import pytest
 
-import movementpredictor.data.main_data
+import movementpredictor.data.data_prep
 from movementpredictor.data.datafilterer import DataFilterer
 
 
