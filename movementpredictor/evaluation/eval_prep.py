@@ -1,9 +1,8 @@
 from collections import defaultdict
 import json
 import os
-import sys
 from typing import List
-sys.path.append('/home/starwit01/workspaces/hanna/movement-predictor')
+import logging
 
 from movementpredictor.cnn import model_architectures
 from movementpredictor.cnn.inferencing import inference_with_stats, InferenceResult
@@ -11,7 +10,6 @@ from movementpredictor.anomalydetection import anomaly_detector
 from movementpredictor.data import dataset
 from movementpredictor.evaluation.eval_config import EvalConfig
 
-import logging
 
 log = logging.getLogger(__name__)
 evalconfig = EvalConfig()
@@ -69,14 +67,14 @@ def main():
     test = dataset.getTorchDataLoader(ds, shuffle=False)
 
     samples_with_stats = inference_with_stats(model, test)
-    print("total test samples: ", len(samples_with_stats))
+    log.info(f"total test samples: {len(samples_with_stats)}")
 
     for anomaly_length in [1, 2, 5, 10, 20, 50]:
         path_store = os.path.join("movementpredictor/evaluation/plots", evalconfig.camera, "distances_labeling_" + make_combined_name(evalconfig.path_model, anomaly_length))
         dist_thr, anomaly_obj_ids = anomaly_detector.calculate_and_visualize_threshold(samples_with_stats, path_store, 
                                                                                        num_anomalous_trajectories=evalconfig.num_anomalies, num_anomalous_frames_per_id=anomaly_length)
         predicted_anomalies = anomaly_detector.get_unlikely_samples(samples_with_stats, dist_thr, anomaly_obj_ids)
-        print("num anomalous tracks: ", len(predicted_anomalies))
+        log.info(f"num anomalous tracks: {len(predicted_anomalies)}")
         store_predictions(predicted_anomalies, evalconfig.path_store_anomalies, evalconfig.path_model, evalconfig.num_anomalies, anomaly_length, dist_thr)
 
 

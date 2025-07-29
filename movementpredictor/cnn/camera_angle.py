@@ -24,13 +24,5 @@ def calculate_camera_angle(dataset: Dataset, pixel_per_axis):
     model.fit(np.array(y_centers).reshape(-1, 1), bbox_height_width)
     slope = model.coef_[0]
     intercept = model.intercept_
-    #print(slope)
-    #print(intercept)
-
-    #learned = [slope*y + intercept for y in y_centers]
-
-    #plt.scatter(y_centers, bbox_height_width)
-    #plt.plot(y_centers, learned)
-    #plt.savefig("test.png")
 
     return slope, intercept

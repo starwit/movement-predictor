@@ -1,4 +1,5 @@
 import json
+import logging
 import numpy as np
 import random
 import zipfile
@@ -12,6 +13,10 @@ import pybase64
 from tqdm import tqdm
 from visionapi.sae_pb2 import SaeMessage
 from visionlib import saedump
+
+
+
+log = logging.getLogger(__name__)
 
 
 class DetectionData:
@@ -155,8 +160,6 @@ def store_data_sniplet(frames_with_ts, detection_data: List[DetectionData], base
     anomaly_intervals = []
     object_ids_in_this_video = np.unique(np.array([det.obj_id for det in detection_data]))
     for obj_id, label, interval in zip(ids_of_interest, labels, time_intervals):
-        #if obj_id in detection_data_dict.keys():
-         #   print(obj_id, "         ", label, "         ", interval)
         if obj_id in object_ids_in_this_video and label != 0:
             anomaly_intervals.append({
                 "object_id": obj_id,
@@ -206,7 +209,7 @@ def create_datasniplets(ids_of_interest: List[str], labels: List[int], anomaly_i
             time_intervals.append([start, end])
             start = necessary_timestamps[i] 
     
-    print(len(time_intervals))
+    log.info(f"length of time intervals: {len(time_intervals)}")
     time_intervals.append([start, necessary_timestamps[-1]])
 
     for interval in time_intervals:
@@ -280,7 +283,7 @@ def create_datasniplets(ids_of_interest: List[str], labels: List[int], anomaly_i
                                 round(trk.bbox[1][0], 4), round(trk.bbox[1][1], 4)
                             ]
                         else:
-                            print("ERROR")
+                            log.error(f"Could not find detection data for {key} in {lookup.keys()[:10]}...")
                             exit(1)
 
                 # store dataset

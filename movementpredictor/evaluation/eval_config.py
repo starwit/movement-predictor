@@ -25,8 +25,7 @@ class EvalConfig:
         self.camera = os.getenv("CAMERA")
 
         self.path_test_data = os.getenv("PATH_TEST_DATA")
-        #streamname = os.path.splitext(os.path.basename(self.path_test_data))[0]
-        self.path_store_anomalies = os.path.join(os.getenv("PATH_STORE_PREDICTED_ANOMALIES"), self.camera)#, streamname)
+        self.path_store_anomalies = os.path.join(os.getenv("PATH_STORE_PREDICTED_ANOMALIES"), self.camera)
         self.path_model = os.getenv("MODEL_WEIGHTS")
 
         self.path_label_box = os.getenv("PATH_LABEL_BOX")

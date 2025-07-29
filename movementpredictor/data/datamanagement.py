@@ -56,8 +56,6 @@ def get_background_frame(path, pixel):
             saedump.DumpMeta.model_validate_json(start_message)
 
             for count, message in enumerate(messages):
-                if count < 32:
-                    continue
                 event = saedump.Event.model_validate_json(message)
                 proto_bytes = pybase64.standard_b64decode(event.data_b64)
 
@@ -70,7 +68,7 @@ def get_background_frame(path, pixel):
     
     except Exception as e:
 
-        print(f"Error processing the file: {e}")
+        log.error(f"Error while extracting background frame from sae-dump {path}, error message: {e}")
         return None
         
 
@@ -127,7 +125,7 @@ class TrackingDataManager:
 
         except Exception as e:
 
-            print(f"Error processing the file: {e}")
+            log.error(f"Error processing the sae-dump: {path}, error message: {e}")
             exit(1)
 
 

@@ -96,7 +96,7 @@ def train_model(path_data, path_model, architecture, output_prob, pixel_per_axis
           
           history['train'].append(train_loss)
           history['val'].append(val_loss)
-          print("iteration " + str(count), "- train_loss=" + str(train_loss) + " - val_loss=" + str(val_loss))
+          log.info(f"iteration {count} - tain_loss={train_loss} - val_loss={val_loss}")
 
           if val_loss < best_loss:
             no_improvement = 0
@@ -105,7 +105,7 @@ def train_model(path_data, path_model, architecture, output_prob, pixel_per_axis
             if save_model:
               torch.save(best_model_wts, path_model + "/model_weights.pth")
           else: 
-            print("no improvement")
+            log.info("no improvement")
             no_improvement += 1
 
           if no_improvement > 4: 

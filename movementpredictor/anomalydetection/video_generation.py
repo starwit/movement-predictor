@@ -1,14 +1,8 @@
 import subprocess
 import time
 import logging
-from collections import defaultdict
-from datetime import datetime, timezone
 import cv2
 import numpy as np
-import os
-import json
-import zipfile
-from zlib import crc32
 
 
 log = logging.getLogger(__name__)
@@ -47,7 +41,7 @@ def store_video(frame_data, path):
             log.error("Video conversion failed.")
             log.debug(process.stderr.read().decode())
     except (IOError, subprocess.SubprocessError) as e:
-        print(e)
+        log(f"Could not complete ffmped command, error: {e}")
 
 
 def draw_bbox_in_frame(frame, bbox):
