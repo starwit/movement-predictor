@@ -157,6 +157,7 @@ cython_debug/
 datasets/
 predictions/
 label_box/
+debugging.py
 traffic_anomaly_dataset/
 *.pth 
 *.json
