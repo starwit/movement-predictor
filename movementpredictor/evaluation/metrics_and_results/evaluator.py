@@ -1,13 +1,11 @@
 from collections import Counter
 from movementpredictor.evaluation.eval_config import EvalConfig
-import logging
 import os
 import matplotlib.pyplot as plt
 
 from movementpredictor.evaluation.metrics_and_results import evaluation_helper, dcg_and_ndcg, precision_recall_f1, histograms
 
 
-log = logging.getLogger(__name__)
 evalconfig = EvalConfig()
 
 

@@ -42,7 +42,8 @@ def inference_with_stats(model: torch.nn.Module, dataloader: torch.utils.data.Da
 
     with torch.no_grad():
         for i, (x, target, ts, id) in tqdm(enumerate(dataloader), desc="inferencing movement predictor CNN"):
-            #if i == 1000:
+            # uncomment for debugging
+            #if i == 1000:  
              #   break
             
             x = x.to(device)

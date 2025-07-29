@@ -1,12 +1,15 @@
 from typing import List
+import os
+import logging
+
 from movementpredictor.cnn import model_architectures
 from movementpredictor.cnn.inferencing import inference_with_stats
 from movementpredictor.data import dataset
 from movementpredictor.evaluation.eval_config import EvalConfig
 from movementpredictor.evaluation.eval_prep import store_predictions
 
-import os
 
+log = logging.getLogger(__name__)
 evalconfig = EvalConfig()
 
 
@@ -25,7 +28,7 @@ def main():
     test = dataset.getTorchDataLoader(ds, shuffle=False)
 
     samples_with_stats = inference_with_stats(model, test)
-    print("total test samples: " + str(len(samples_with_stats)))
+    log.info(f"total test samples: {len(samples_with_stats)}")
 
     store_predictions(samples_with_stats, evalconfig.path_store_anomalies, evalconfig.path_model, evalconfig.num_anomalies)
 

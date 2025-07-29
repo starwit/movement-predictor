@@ -11,8 +11,6 @@ def plot_input_target_output(frame, x, y, mu, sigma, skew=None):
     frame_np = frame.numpy()
     target = y.cpu().numpy()
 
-    #mask_others_np = np.zeros(frame_np.shape)
-    #mask_others_np[x[2].cpu().numpy() != 0] = 1
     mask_others_np_sin = x[0].cpu().numpy()
     mask_others_np_cos = x[1].cpu().numpy()
     mask_others_np = np.zeros(frame_np.shape)
@@ -50,17 +48,15 @@ def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None
     plt.title("target")
     frame_np = (frame_np * 255).astype(np.uint8)
     frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_GRAY2RGB)
-    #cv2.circle(frame_rgb, [round(target[0]*frame_np.shape[-1]), round(target[1]*frame_np.shape[-2])], radius=2, color=(255, 0, 0), thickness=-1)
-    #plt.imshow(frame_rgb)
     plt.imshow(cv2.cvtColor(frame_rgb, cv2.COLOR_BGR2RGB))
-    plt.scatter(round(target[0]*frame_np.shape[-1]), round(target[1]*frame_np.shape[-2]), color='red', marker='x', s=100)#, label="Actual position " + r'$C_{t+\delta,j}$')
+    plt.scatter(round(target[0]*frame_np.shape[-1]), round(target[1]*frame_np.shape[-2]), color='red', marker='x', s=100, label="Actual position " + r'$C_{t+\delta,j}$')
 
     if mask_others_np is not None:
         plt.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
     plt.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
     plt.axis('off')
 
-    #plt.legend(fontsize=16, loc="lower right")
+    plt.legend(fontsize=16, loc="lower right")
 
     plt.subplot(1, 3, 3)
     plt.title("prediction") if dist is None else plt.title("prediction, distance=" + str(dist))
@@ -101,8 +97,8 @@ def plot_gaussian_variance(ax, frame_rgb, mu, sigma, scale_factor=1, num_points=
     mu_scaled = (mu[0] * width, mu[1] * height)
     
     ax.imshow(cv2.cvtColor(frame_rgb, cv2.COLOR_BGR2RGB))
-    ax.scatter(points[:, 0], points[:, 1], c='cyan', s=5)#, label="Gaussian variance " + r'$\Sigma_{t+\delta,j}$')
-    ax.scatter(mu_scaled[0], mu_scaled[1], color='red', marker='o', s=100)#, label="Expected position " + r'$\hat{C}_{t+\delta,j}$')
+    ax.scatter(points[:, 0], points[:, 1], c='cyan', s=5, label="Gaussian variance " + r'$\Sigma_{t+\delta,j}$')
+    ax.scatter(mu_scaled[0], mu_scaled[1], color='red', marker='o', s=100, label="Expected position " + r'$\hat{C}_{t+\delta,j}$')
 
     proxy_line = Line2D([0], [0],
                     color='cyan',
@@ -114,7 +110,7 @@ def plot_gaussian_variance(ax, frame_rgb, mu, sigma, scale_factor=1, num_points=
         if 'Gaussian variance' in lab:
             handles[i] = proxy_line
     
-    #ax.legend(handles=handles, fontsize=16, loc="lower right")
+    ax.legend(handles=handles, fontsize=16, loc="lower right")
     ax.set_title("Gaussian Variance")
     ax.set_xlim(0, width)
     ax.set_ylim(height, 0)
@@ -164,10 +160,10 @@ def plot_skewed_mahalanobis_points(ax, frame_rgb, mu, sigma, skew_lambda, scale_
     mu_scaled = (mu[0] * width, mu[1] * height)
 
     ax.imshow(cv2.cvtColor(frame_rgb, cv2.COLOR_BGR2RGB))
-    ax.plot(points[:, 0], points[:, 1], color="cyan", linewidth=3)#, label=r'skewed $D_M$ boundary')
-    ax.scatter(mu_scaled[0], mu_scaled[1], color='red', marker='o', s=100)#, label="Expected position " + r'$\hat{C}_{t+\delta,j}$')
+    ax.plot(points[:, 0], points[:, 1], color="cyan", linewidth=3, label=r'skewed $D_M$ boundary')
+    ax.scatter(mu_scaled[0], mu_scaled[1], color='red', marker='o', s=100, label="Expected position " + r'$\hat{C}_{t+\delta,j}$')
 
-    #ax.legend(fontsize=16, loc="lower right")
+    ax.legend(fontsize=16, loc="lower right")
     ax.set_title("Skewed Mahalanobis Variance")
     ax.set_xlim(0, width)
     ax.set_ylim(height, 0)
