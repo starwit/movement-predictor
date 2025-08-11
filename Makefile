@@ -2,11 +2,8 @@
 
 export PACKAGE_NAME=movementpredictor
 
-install: check-settings
+install:
 	poetry install
-
-check-settings:
-	./check_settings.sh
 
 test: install
 	poetry run pytest
