@@ -61,7 +61,7 @@ jobs:
 
       - name: Create github release
         run: | 
-          APP_VERSION=$(cat pyproject.toml | grep "version" | head -1 | cut -d'=' -f2 | xargs echo -n) 
+          APP_VERSION=$(poetry version --short)
           gh release create $APP_VERSION -F README.md --title "${APP_VERSION}" --target $(git branch --show-current)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
