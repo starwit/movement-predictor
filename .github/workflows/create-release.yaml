@@ -17,8 +17,6 @@ permissions:
 
 env:
   IMAGE_NAME: movement-predictor
-  DOCKERHUB_USERNAME: starwit
-  DOCKERHUB_ORG: starwitorg 
 
 jobs:
   create-release:
@@ -28,9 +26,6 @@ jobs:
       image: starwitorg/debian-packaging:0.0.3
       volumes:
         - /home/githubrunner/.cache/pypoetry:/root/.cache/pypoetry
-      env:
-        PASSPHRASE: ${{ secrets.OSSRH_GPG_SECRET_KEY_PASSWORD_FLAT }}
-        GPG_KEY: ${{ secrets.OSSRH_GPG_SECRET_KEY_B64 }}
 
     steps:
       #----------------------------------------------
