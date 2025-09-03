@@ -125,7 +125,7 @@ def create_video(anomaly_dict: Dict[str, List[int]], path_sae_dumps: str, path_s
     
     for key in video_dict:
         path = os.path.join(path_store, key[0])
-        store_frames_and_bboxs(video_dict[key], path)
+        #store_frames_and_bboxs(video_dict[key], path)
         store_video(video_dict[key], path)
 
 

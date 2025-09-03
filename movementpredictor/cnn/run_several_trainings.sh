@@ -5,16 +5,16 @@ set -euo pipefail
 #  Static env parameters
 # ————————————————————————————————————————————————————————————————
 export MODEL_ARCHITECTURE="MobileNet_v3"          
-export PATH_SAE_DATA_TRAIN="movementpredictor/data/source/RangelineSMedicalDr_2025-03-07.saedump"
-export PATH_SAE_DATA_TEST="movementpredictor/data/source/RangelineS116thSt_2025-06-18_24h.saedump"
-export NAME_DATA="2sec"
-export TIME_DIFF_PREDICTION="2"
-export CAMERA="RangelineS116thSt"
+export PATH_SAE_DATA_TRAIN="movementpredictor/data/source/MononElmStreetNB_2025-06-18_24h.saedump"    
+export PATH_SAE_DATA_TEST="movementpredictor/data/source/MononElmStreetNB_2025-07-30_24h.saedump" 
+export NAME_DATA="0.5sec"
+export TIME_DIFF_PREDICTION="0.5"
+export CAMERA="MononElmStreetNB"
 export PERCENTAGE_OF_ANOMALIES="99.95"
 export PIXEL_PER_AXIS="120"
 export YOLO_OBJECT_TYPE_OF_INTEREST="2"
 export FRAME_RATE="10"
-export STEPS="train"
+export COMPUTE_STEPS="train"
 
 # ————————————————————————————————————————————————————————————————
 #  Loop over symmetric & asymmetric, 5 runs each

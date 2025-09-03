@@ -2,7 +2,7 @@
 export PATH_LABEL_BOX="movementpredictor/evaluation/label_box"
 export PATH_STORE_PREDICTED_ANOMALIES="movementpredictor/evaluation/predictions"
 export NUM_ANOMALIES=50
-export CAMERA="RangelineS116thSt"
+export CAMERA="MononElmStreetNB"
 export MODEL_ARCHITECTURE="MobileNet_v3"
 
 

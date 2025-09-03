@@ -70,7 +70,7 @@ def train_model(path_data, path_model, architecture, output_prob, pixel_per_axis
     history = dict(train=[], val=[])
     history["lr"] = lr
 
-    batch_interval = min(len(train_loader), batch_interval)
+    batch_interval = min(int(len(train_loader)/3), batch_interval)
     best_model_wts = copy.deepcopy(model.state_dict())
     best_loss = float('inf')
     no_improvement = 0

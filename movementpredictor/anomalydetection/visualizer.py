@@ -74,6 +74,58 @@ def make_plot(frame_np, mask_interest_np, target, mu, sigma, mask_others_np=None
     plt.axis('off')
 
 
+def make_single_plot(frame_np, mask_interest_np, target, mu, sigma,
+                     mask_others_np=None, angle=None, dist=None, skew_lambda=None):
+    """
+    Draw a single figure with:
+      - grayscale frame
+      - (optional) other-objects mask (red, transparent)
+      - target-of-interest mask (blue, transparent)
+      - target point (red 'x')
+      - predicted distribution (Gaussian or skewed) overlaid
+    """
+
+    # Title string
+    title_parts = ["input + target + prediction"]
+    if angle is not None:
+        title_parts.append(f"angle={angle}")
+    if dist is not None:
+        title_parts.append(f"distance={dist}")
+    title = ", ".join(title_parts)
+
+    # Prepare frame as RGB for consistent overlay
+    frame_uint8 = (frame_np * 255).astype(np.uint8) if frame_np.dtype != np.uint8 else frame_np
+    frame_rgb = cv2.cvtColor(frame_uint8, cv2.COLOR_GRAY2RGB)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.set_title(title)
+
+    # If you draw predicted distribution first, it might be covered by masks;
+    # draw it before re-showing masks with alpha below (or re-draw after masks).
+    if skew_lambda is None:
+        plot_gaussian_variance(ax, frame_rgb.copy(), mu, sigma)
+    else:
+        plot_skewed_mahalanobis_points(ax, frame_rgb.copy(), mu, sigma, skew_lambda)
+
+    # Base frame
+    ax.imshow(frame_rgb)
+
+    # Optional masks
+    if mask_others_np is not None:
+        ax.imshow(mask_others_np, cmap='Reds', alpha=0.4, interpolation='nearest')
+    ax.imshow(mask_interest_np, cmap='Blues', alpha=0.3, interpolation='nearest')
+
+    # Target marker (expects normalized coords in [0,1])
+    tx = round(target[0] * frame_rgb.shape[1])
+    ty = round(target[1] * frame_rgb.shape[0])
+    ax.scatter(tx, ty, color='red', marker='x', s=100,
+               label=r"Actual position $C_{t+\delta,j}$")
+
+    ax.axis('off')
+    ax.legend(loc="lower right", fontsize=12)
+    fig.tight_layout()
+
+
 def plot_gaussian_variance(ax, frame_rgb, mu, sigma, scale_factor=1, num_points=100):
     """Plottet die symmetrische Gaussian-Varianz als Punktwolke."""
     

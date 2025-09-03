@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 
-
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger(__name__)
 
 config = ModelConfig()
@@ -28,7 +28,7 @@ for i, entry in enumerate(results):
         value=entry["final_val"],
         params=entry["params"],
         distributions={
-            "lr": optuna.distributions.LogUniformDistribution(1e-5, 1e-2),
+            "lr": optuna.distributions.LogUniformDistribution(1e-6, 1e-2),
         },
         user_attrs={
             "train_loss_per_epoch": entry["train_history"],

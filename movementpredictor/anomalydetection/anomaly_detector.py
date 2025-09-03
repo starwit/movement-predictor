@@ -105,24 +105,25 @@ def get_unlikely_trajectories(samples_with_stats: List[inferencing.InferenceResu
         score = score_dict.get(obj_id, 0.0)
 
         if score >= score_threshold:
-            selected_samples.extend(samples)
+            #selected_samples.extend(samples)
+            anomaly_samples.extend(samples)
             selected_trajectories.append((obj_id, samples))
 
-    all_distances = [s.prediction.distance_of_target for s in selected_samples]
-    mean_dist = np.mean(all_distances)
-    std_dist = np.std(all_distances)
+    #all_distances = [s.prediction.distance_of_target for s in selected_samples]
+    #mean_dist = np.mean(all_distances)
+    #std_dist = np.std(all_distances)
     # 1-sigma border
-    sigma_threshold = mean_dist + std_dist
+    #sigma_threshold = mean_dist + std_dist
 
-    for obj_id, samples in selected_trajectories:
-        over_sigma = [s for s in samples if s.prediction.distance_of_target > sigma_threshold]
+    #for obj_id, samples in selected_trajectories:
+     #   over_sigma = [s for s in samples if s.prediction.distance_of_target > sigma_threshold]
 
-        if len(over_sigma) >= 5:
-            anomaly_samples.extend(over_sigma)
-        else:
+      #  if len(over_sigma) >= 5:
+       #     anomaly_samples.extend(over_sigma)
+        #else:
             # min 5 anomaly samples per anomaly trajectory
-            top_5 = sorted(samples, key=lambda s: s.prediction.distance_of_target, reverse=True)[:5]
-            anomaly_samples.extend(top_5)
+         #   top_5 = sorted(samples, key=lambda s: s.prediction.distance_of_target, reverse=True)[:5]
+          #  anomaly_samples.extend(top_5)
 
     
     return anomaly_samples
@@ -259,7 +260,7 @@ def get_unlikely_samples_inference(samples_with_stats: List[inferencing.Inferenc
     return anomalies
 
 
-def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_dump, pixel_per_axis, path_plots):
+def anomalies_with_video(anomalies: List[inferencing.InferenceResult], paths_sae_dump, pixel_per_axis, path_plots):
     anomaly_dict = defaultdict(list)
     anomaly_ts_int = [int(anomaly.timestamp) for anomaly in anomalies]
 
@@ -275,29 +276,30 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
         end = max_ts + 3000
         video_dict[(key, start, end)] = [anomaly_dict[key]]
     
-    with open(path_sae_dump, 'r') as input_file:
-        messages = saedump.message_splitter(input_file)
+    for path_sae_dump in paths_sae_dump:
+        with open(path_sae_dump, 'r') as input_file:
+            messages = saedump.message_splitter(input_file)
 
-        start_message = next(messages)
-        saedump.DumpMeta.model_validate_json(start_message)
+            start_message = next(messages)
+            saedump.DumpMeta.model_validate_json(start_message)
 
-        for message in tqdm(messages, desc="collecting frames"):
-            event = saedump.Event.model_validate_json(message)
-            proto_bytes = pybase64.standard_b64decode(event.data_b64)
+            for message in tqdm(messages, desc="collecting frames"):
+                event = saedump.Event.model_validate_json(message)
+                proto_bytes = pybase64.standard_b64decode(event.data_b64)
 
-            proto = SaeMessage()
-            proto.ParseFromString(proto_bytes)
-            frame_ts = proto.frame.timestamp_utc_ms
+                proto = SaeMessage()
+                proto.ParseFromString(proto_bytes)
+                frame_ts = proto.frame.timestamp_utc_ms
 
-            fitting_keys = find_intervals_containing_timestamp(frame_ts, video_dict.keys())
+                fitting_keys = find_intervals_containing_timestamp(frame_ts, video_dict.keys())
 
-            for key in fitting_keys:
-                frame_info = [proto.frame, None]
-                for detection in proto.detections:
-                    if key[0] == str(detection.object_id.hex()):
-                        frame_info[1] = detection.bounding_box
-                        break
-                video_dict[key].append(frame_info)
+                for key in fitting_keys:
+                    frame_info = [proto.frame, None]
+                    for detection in proto.detections:
+                        if key[0] == str(detection.object_id.hex()):
+                            frame_info[1] = detection.bounding_box
+                            break
+                    video_dict[key].append(frame_info)
 
     dict_count = 0
     for key in video_dict:
@@ -315,7 +317,7 @@ def anomalies_with_video(anomalies: List[inferencing.InferenceResult], path_sae_
 
             skew = anomaly.prediction.lambda_skew
             mask_interest_np = create_mask_tensor(pixel_per_axis, [anomaly.input], scale=False).numpy()
-            visualizer.make_plot(frame_tensor.numpy(), mask_interest_np, np.array(anomaly.target), np.array(anomaly.prediction.mean), 
+            visualizer.make_single_plot(frame_tensor.numpy(), mask_interest_np, np.array(anomaly.target), np.array(anomaly.prediction.mean), 
                     np.array(anomaly.prediction.variance), dist=anomaly.prediction.distance_of_target, skew_lambda=np.array(skew) if skew is not None else None)
             
             plt.savefig(os.path.join(path, "a" + str(int(img_count)) + ".png"))

@@ -1,307 +1,292 @@
-import json
-import logging
-import numpy as np
-import random
-import zipfile
-import pandas as pd
-from movementpredictor.data import datamanagement, datafilterer
 import os
-import re
-from collections import defaultdict
-from typing import Dict, List
+import io
+import csv
+import json
+import time
+import tarfile
 import pybase64
 from tqdm import tqdm
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+
 from visionapi.sae_pb2 import SaeMessage
 from visionlib import saedump
 
+# import your tracking utilities
+from movementpredictor.data import datamanagement, datafilterer  
+
+from movementpredictor.config import ModelConfig
+config = ModelConfig()
 
 
-log = logging.getLogger(__name__)
+
+def atomic_write_bytes(path, data):
+    """Write bytes atomically to avoid partial files on crash."""
+    tmp = f"{path}.tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
 
 
-class DetectionData:
-    obj_id: str
-    class_id: str
-    longitude: float
-    latitude: float
-    boundingbox: List[float]        # [x_min, y_min, x_max, y_max]
-    confidence: float
-    timestamp: int
+class ShardWriter:
+    """
+    Minimal WebDataset-style shard writer (.tar, uncompressed).
+    Writes <key>.jpg entries (no per-sample JSON; global CSV/JSONL handles metadata).
+    """
+    def __init__(
+        self,
+        out_dir: str,
+        prefix: str = "frames",
+        max_shard_size_bytes: int = 1_000_000_000,  # ~1 GB
+        max_samples_per_shard: int = 10000,
+        flush_every: int = 64,
+    ):
+        os.makedirs(out_dir, exist_ok=True)
+        self.out_dir = out_dir
+        self.prefix = prefix
+        self.max_size = max_shard_size_bytes
+        self.max_samples = max_samples_per_shard
+        self.flush_every = flush_every
+
+        self.shard_idx = 0
+        self.samples_in_shard = 0
+        self.bytes_in_shard = 0
+        self.tar = None
+        self._fobj = None
+        self.current_path = None
+
+        self._open_new_shard()
+
+    def _open_new_shard(self):
+        self._close_current()
+        self.current_path = os.path.join(self.out_dir, f"{self.prefix}-{self.shard_idx:06d}.tar")
+        self._fobj = open(self.current_path, "wb")
+        self.tar = tarfile.open(fileobj=self._fobj, mode="w")
+        self.samples_in_shard = 0
+        self.bytes_in_shard = 0
+
+    def _close_current(self):
+        if self.tar is not None:
+            self.tar.close()
+            self._fobj.flush()
+            os.fsync(self._fobj.fileno())
+            self._fobj.close()
+            self.tar = None
+            self._fobj = None
+
+    def add(self, key: str, jpg_bytes: bytes):
+        now = int(time.time())
+        ti = tarfile.TarInfo(name=f"{key}.jpg")
+        ti.size = len(jpg_bytes)
+        ti.mtime = now
+        self.tar.addfile(ti, io.BytesIO(jpg_bytes))
+        # account for data + tar header/block overhead (roughly)
+        self.bytes_in_shard += ti.size + 512
+        self.samples_in_shard += 1
+
+        # periodic flush
+        if self.samples_in_shard % self.flush_every == 0:
+            self.tar.fileobj.flush()
+            os.fsync(self.tar.fileobj.fileno())
+
+        # rollover if limits reached
+        if (self.samples_in_shard >= self.max_samples) or (self.bytes_in_shard >= self.max_size):
+            self.shard_idx += 1
+            self._open_new_shard()
+
+    def close(self):
+        self._close_current()
 
 
-def create_train_data(path_sae_dump, path_store):
-    detection_dict = []
+
+def create_raw_dataset(
+    paths_sae_dumps: str,
+    path_store: str,
+    *,
+    max_frames: int | None = None,
+    flush_every: int = 64,
+    workers: int = 2,
+    write_mode: str = "shards",        # "files" | "shards" | "both"
+    shard_prefix: str = "frames",
+    max_shard_size_bytes: int = 1_000_000_000,
+    max_samples_per_shard: int = 10000
+) -> None:
+    """
+    Single pass over SAE dump that:
+      - writes frames (files and/or shards),
+      - writes an index.csv for frames,
+      - writes detections with extra mapping fields: frame_index, frame_key, shard.
+
+    Detections output:
+      - "jsonl": object_detections.jsonl (one record per line) -> memory safe
+      - "json" : object_detections.json  (single array) -> may use lots of RAM
+    """
     os.makedirs(path_store, exist_ok=True)
+    max_frames_per_dump = int(max_frames/len(paths_sae_dumps)) if max_frames is not None else None
 
-    trackManager = datamanagement.TrackingDataManager()
-    trackedObjects = trackManager.getTrackedBaseData(path_sae_dump, inferencing=False)
-    trackedObjects = datafilterer.DataFilterer().apply_filtering(trackedObjects)
+    # --- tracking lookup (bbox by (object_id, capture_ts)) ---
+    track_manager = datamanagement.TrackingDataManager()
+    lookup_dict = {}  # accumulate across all dumps
 
-    lookup = {
-        (obj_id, entry.capture_ts): entry.bbox
-        for obj_id, entries in trackedObjects.items()
-        for entry in entries
-    }
-    lookup = defaultdict(lambda: None, lookup)
-    
-    with open(path_sae_dump, 'r') as input_file:
-        messages = saedump.message_splitter(input_file)
+    for path_sae_dump in paths_sae_dumps:
+        tracked_objects = track_manager.getTrackedBaseData(path_sae_dump, inferencing=False, max_frames=max_frames_per_dump)
+        tracked_objects = datafilterer.DataFilterer().apply_filtering(tracked_objects)
 
-        start_message = next(messages)
-        saedump.DumpMeta.model_validate_json(start_message)
-
-        for i, message in tqdm(enumerate(messages), desc="collecting frames"):
-            event = saedump.Event.model_validate_json(message)
-            proto_bytes = pybase64.standard_b64decode(event.data_b64)
-
-            proto = SaeMessage()
-            proto.ParseFromString(proto_bytes)
-
-            detections_per_timestamp = []
-            for det in proto.detections:
-                
-                obj_id = str(det.object_id.hex())
-                bbox = lookup[(obj_id, proto.frame.timestamp_utc_ms)]
-                if bbox is None:
-                    continue
-                boundingbox = [
-                        round(bbox[0][0], 4), round(bbox[0][1], 4),
-                        round(bbox[1][0], 4), round(bbox[1][1], 4)
-                    ]
-                
-                detections_per_timestamp.append({
-                    "class_id": det.class_id,
-                    "object_id": obj_id,
-                    "longitude": round(det.geo_coordinate.longitude, 5),
-                    "latitude": round(det.geo_coordinate.latitude, 5),
-                    "boundingbox": boundingbox,     
-                    "confidence": round(det.confidence, 4)
-                })
-
-            detection_dict.append({
-                "timestamp": proto.frame.timestamp_utc_ms,
-                "detections": detections_per_timestamp
-            })
-    
-    path_detection_json = os.path.join(path_store, "object_detections.json")
-    with open(path_detection_json, "w", encoding="utf-8") as file:
-        json.dump(detection_dict, file, indent=4)
-
-    
-
-
-def store_data_sniplet(frames_with_ts, detection_data: List[DetectionData], base_path: str, ids_of_interest: List[str], labels: List[int], 
-                       time_intervals: List[List[int]], prefix="video", width=3):
-    #TODO: talk about data format with Flo
-
-    # create subfolder videoxxx
-    os.makedirs(base_path, exist_ok=True)
-    pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
-
-    max_idx = -1
-    for name in os.listdir(base_path):
-        match = pattern.match(name)
-        if match:
-            idx = int(match.group(1))
-            if idx > max_idx:
-                max_idx = idx
-
-    next_idx = max_idx + 1
-    new_name = f"{prefix}{next_idx:0{width}d}"
-    new_folder_path = os.path.join(base_path, new_name)
-    frames_path = os.path.join(new_folder_path, "video_frames")
-
-    os.makedirs(frames_path, exist_ok=True)
-
-    # store frames and detection data
-    data_dict = {
-        "name_video": new_name,
-        "frame_data": []
-    }
-
-    detection_data_dict = defaultdict(list)
-    for det in detection_data:
-        key = det.timestamp
-        detection_data_dict[key].append(det)
-
-    #with zipfile.ZipFile(frames_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zipf:
-    for idx, (frame_bytes, ts) in enumerate(frames_with_ts, start=1):
-        filename = f"frame{idx:04d}.jpg"
-        file_path = os.path.join(frames_path, filename)
-        #zipf.writestr(filename, frame_bytes)
-        with open(file_path, "wb") as f:
-            f.write(frame_bytes)
-
-        detections = detection_data_dict[ts]
-        detection_dicts = []
-
-        for det in detections:
-            detection_dicts.append({
-                "class_id": det.class_id,
-                "object_id": det.obj_id,
-                "longitude": round(det.longitude, 4),
-                "latitude": round(det.latitude, 4),
-                "boundingbox": det.boundingbox,     
-                "confidence": round(det.confidence, 4)
-                })
-
-        frame_data_entry = {
-            "frame": filename,
-            "timestamp": ts,
-            "detections": detection_dicts
+        # build per-file mapping then merge
+        per_file = {
+            (obj_id, entry.capture_ts): entry.bbox
+            for obj_id, entries in tracked_objects.items()
+            for entry in entries
         }
-        data_dict["frame_data"].append(frame_data_entry)
-    
-    path_detection_json = os.path.join(new_folder_path, "object_detections.json")
-    with open(path_detection_json, "w", encoding="utf-8") as file:
-        json.dump(data_dict, file, indent=4)
-    
-    # store anomaly_predictions
-    anomaly_intervals = []
-    object_ids_in_this_video = np.unique(np.array([det.obj_id for det in detection_data]))
-    for obj_id, label, interval in zip(ids_of_interest, labels, time_intervals):
-        if obj_id in object_ids_in_this_video and label != 0:
-            anomaly_intervals.append({
-                "object_id": obj_id,
-                "start_timestamp": interval[0],
-                "end_timestamp": interval[1],
-                "label": label
-            })
+        lookup_dict.update(per_file)  # extend + overwrite on key collisions
 
-    df = pd.DataFrame(anomaly_intervals)
-    df.to_csv(os.path.join(new_folder_path, "labels.csv"), index=False)
+    # make it return None on missing keys
+    lookup = defaultdict(lambda: None, lookup_dict)
 
+    # --- outputs for frames ---
+    frames_dir = os.path.join(path_store, "frames")
+    shards_dir = os.path.join(path_store, "frames_shards")
+    if write_mode in ("files", "both"):
+        os.makedirs(frames_dir, exist_ok=True)
+    shard_writer = None
+    if write_mode in ("shards", "both"):
+        shard_writer = ShardWriter(
+            out_dir=shards_dir,
+            prefix=shard_prefix,
+            max_shard_size_bytes=max_shard_size_bytes,
+            max_samples_per_shard=max_samples_per_shard,
+            flush_every=flush_every,
+        )
 
+    # async file writer pool
+    executor = ThreadPoolExecutor(max_workers=workers) if write_mode in ("files", "both") else None
+    pending, written_since_flush = [], 0
 
-def create_datasniplets(ids_of_interest: List[str], labels: List[int], anomaly_intervals: List[List[int]], path_sae_dump: str, path_store: str,
-                        length_vids_in_min=3):
-    necessary_timestamps = []
+    def submit_write(basename_no_ext: str, ext: str, data_bytes: bytes):
+        fname = os.path.join(frames_dir, f"{basename_no_ext}.{ext}")
+        return executor.submit(atomic_write_bytes, fname, data_bytes)
 
-    with open(path_sae_dump, 'r') as input_file:
-        messages = saedump.message_splitter(input_file)
+    # --- frame index csv (covers both modes) ---
+    index_path = os.path.join(path_store, "index.csv")
+    write_header = not os.path.exists(index_path)
+    index_file = open(index_path, "a", newline="", buffering=1)
+    index_writer = csv.writer(index_file)
+    if write_header:
+        index_writer.writerow(["filename", "timestamp_utc_ms", "frame_index", "shard"])
 
-        start_message = next(messages)
-        saedump.DumpMeta.model_validate_json(start_message)
+    # --- detections output ---
+    det_list = []   # only used if detections_out_format == "json"
+    det_path_json = os.path.join(path_store, "object_detections.json")
+    det_fp = None
 
-        for message in tqdm(messages, desc="collecting frames"):
-            event = saedump.Event.model_validate_json(message)
-            proto_bytes = pybase64.standard_b64decode(event.data_b64)
+    try:
+        for path_sae_dump in paths_sae_dumps:
+            with open(path_sae_dump, "r") as input_file:
+                messages = saedump.message_splitter(input_file)
 
-            proto = SaeMessage()
-            proto.ParseFromString(proto_bytes)
+                # Validate meta/header
+                start_message = next(messages)
+                saedump.DumpMeta.model_validate_json(start_message)
 
-            for detection in proto.detections:
-                id = str(detection.object_id.hex())
-                if id in ids_of_interest:
-                    necessary_timestamps.append(proto.frame.timestamp_utc_ms)
-                    break
-    
-    necessary_timestamps = sorted(necessary_timestamps)
-    time_intervals = []
+                for i, message in tqdm(enumerate(messages), desc="collecting frames"):
+                    if max_frames_per_dump is not None and i >= max_frames_per_dump:
+                        break
 
-    start = necessary_timestamps[0]
+                    event = saedump.Event.model_validate_json(message)
+                    proto_bytes = pybase64.standard_b64decode(event.data_b64)
 
-    for i in range(1, len(necessary_timestamps)):
-        delta_ms = necessary_timestamps[i] - necessary_timestamps[i-1]
+                    proto = SaeMessage()
+                    proto.ParseFromString(proto_bytes)
 
-        if delta_ms >= length_vids_in_min * 60 * 1000:  # length_vids_in_min in millisec
-            end = necessary_timestamps[i-1]
-            time_intervals.append([start, end])
-            start = necessary_timestamps[i] 
-    
-    log.info(f"length of time intervals: {len(time_intervals)}")
-    time_intervals.append([start, necessary_timestamps[-1]])
+                    # --- frame extraction ---
+                    frame_data = proto.frame.frame_data_jpeg
+                    ts_ms = int(getattr(proto.frame, "timestamp_utc_ms", 0) or 0)
+                    base_name = f"frame_{ts_ms:013d}_{i:06d}" if ts_ms > 0 else f"frame_no-ts_{i:06d}"
+                    shard_name = ""
+                    key = base_name  # key inside shard
+                    frame_filename = f"{base_name}.jpg"
 
-    for interval in time_intervals:
-        start, end = interval
-        before = random.uniform(0, (length_vids_in_min/2) * 60 * 1000)      # add random max. length_vids_in_min/2 min before & max length_vids_in_min/2 min after interval
-        after = random.uniform(0, (length_vids_in_min/2) * 60 * 1000)
-        interval = [start-before, end+after]
-    
-    frames_with_ts = []
-    detection_data: List[DetectionData] = []
-    num_interval = 0
-    os.makedirs(path_store, exist_ok=True)
-    
-    with open(path_sae_dump, 'r') as input_file:
-        messages = saedump.message_splitter(input_file)
+                    # write: files
+                    if write_mode in ("files", "both"):
+                        fut = submit_write(base_name, "jpg", frame_data)
+                        pending.append(fut)
+                        written_since_flush += 1
 
-        start_message = next(messages)
-        saedump.DumpMeta.model_validate_json(start_message)
+                    # write: shards (sync)
+                    if write_mode in ("shards", "both"):
+                        shard_writer.add(key, frame_data)
+                        shard_name = os.path.basename(shard_writer.current_path)
 
-        for message in tqdm(messages, desc="collecting frames"):
-            event = saedump.Event.model_validate_json(message)
-            proto_bytes = pybase64.standard_b64decode(event.data_b64)
+                    # index row for frames
+                    index_writer.writerow([frame_filename, ts_ms, i, shard_name])
 
-            proto = SaeMessage()
-            proto.ParseFromString(proto_bytes)
+                    # --- detections for this frame (with bbox lookup) ---
+                    detections_per_timestamp = []
+                    for det in getattr(proto, "detections", []):
+                        obj_id = str(det.object_id.hex())
+                        bbox = lookup[(obj_id, ts_ms)]
+                        if bbox is None:
+                            continue
+                        boundingbox = [
+                            round(bbox[0][0], 4), round(bbox[0][1], 4),
+                            round(bbox[1][0], 4), round(bbox[1][1], 4)
+                        ]
+                        detections_per_timestamp.append({
+                            "class_id": det.class_id,
+                            "object_id": obj_id,
+                            "longitude": round(det.geo_coordinate.longitude, 5),
+                            "latitude": round(det.geo_coordinate.latitude, 5),
+                            "boundingbox": boundingbox,
+                            "confidence": round(det.confidence, 4)
+                        })
 
-            ts = proto.frame.timestamp_utc_ms 
-            if ts < time_intervals[num_interval][0]:
-                continue
+                    det_record = {
+                        "timestamp": ts_ms,
+                        "frame_index": i,
+                        "frame_key": frame_filename,  # exact filename
+                        "shard": shard_name,          # empty string if not using shards
+                        "detections": detections_per_timestamp,
+                    }
 
-            elif ts >= time_intervals[num_interval][0] and ts <= time_intervals[num_interval][1]:
-                frames_with_ts.append([proto.frame.frame_data_jpeg, ts])
+                    det_list.append(det_record)
 
-                for detection in proto.detections:
-                    det = DetectionData()
+                    # periodic flush (files + index + jsonl)
+                    if write_mode in ("files", "both") and written_since_flush >= flush_every:
+                        for f in pending:
+                            f.result()
+                        pending.clear()
+                        written_since_flush = 0
+                        index_file.flush(); os.fsync(index_file.fileno())
+                        if det_fp is not None:
+                            det_fp.flush()
 
-                    det.class_id = detection.class_id
-                    det.obj_id = str(detection.object_id.hex())
-                    det.longitude = detection.geo_coordinate.longitude
-                    det.latitude = detection.geo_coordinate.latitude
-                    det.confidence = detection.confidence
-                    det.timestamp = ts
+        # drain pending file writes
+        if write_mode in ("files", "both"):
+            for f in pending:
+                f.result()
+            pending.clear()
 
-                    bbox = detection.bounding_box
-                    det.boundingbox = [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y]
+        # finalize detections
+        with open(det_path_json, "w", encoding="utf-8") as fjson:
+            json.dump(det_list, fjson, indent=2, ensure_ascii=False)
 
-                    detection_data.append(det)
-            
-            else:       # ts > interval end time_intervals[num_interval][1]
-        
-                # BOUNDINGBOX SMOOTHING
-                track_list = []
-                for det in detection_data:
-                    center = ((det.boundingbox[0] + det.boundingbox[2]) * 0.5, (det.boundingbox[1] + det.boundingbox[3]) * 0.5)
-                    bbox = [[det.boundingbox[0], det.boundingbox[1]], [det.boundingbox[2], det.boundingbox[3]]]
-                    tracked_object = datamanagement.TrackedObjectPosition(capture_ts=det.timestamp, uuid=det.obj_id, class_id=det.class_id, center=center, bbox=bbox)
-                    track_list.append(tracked_object)
-                
-                trackedObjects = datafilterer.DataFilterer().only_smoothing(track_list)
-                lookup = {
-                    (det.obj_id, det.timestamp): idx
-                    for idx, det in enumerate(detection_data)
-                }
-                for obj_id, track_list in tqdm(trackedObjects.items(), desc="replace bboxes with smoothed bbox"):
-                    for trk in track_list:
-                        key = (obj_id, trk.capture_ts)
-                        idx = lookup.get(key)
-                        if idx is not None:
-                            detection_data[idx].boundingbox = [
-                                round(trk.bbox[0][0], 4), round(trk.bbox[0][1], 4),
-                                round(trk.bbox[1][0], 4), round(trk.bbox[1][1], 4)
-                            ]
-                        else:
-                            log.error(f"Could not find detection data for {key} in {lookup.keys()[:10]}...")
-                            exit(1)
+        # final fsync for CSV
+        index_file.flush()
+        os.fsync(index_file.fileno())
 
-                # store dataset
-                store_data_sniplet(frames_with_ts, detection_data, path_store, ids_of_interest, labels, anomaly_intervals)
-                num_interval += 1
-                frames_with_ts = []
-                detection_data = []
+    finally:
+        index_file.close()
+        if det_fp is not None:
+            det_fp.flush()
+            det_fp.close()
+        if shard_writer is not None:
+            shard_writer.close()
+        if executor is not None:
+            executor.shutdown(wait=True)
 
+    print("Done.")
 
-def get_detected_anomalies_from_label_box(path_label_box: str, camera: str) -> List[str]:
-    path_label_box = os.path.join(path_label_box, camera)
-    ids = os.listdir(path_label_box)
-    labels = []
-    time_intervals = []
-    for obj_id in ids:
-        with open(os.path.join(path_label_box, obj_id, "labeldata.json"), "r", encoding="utf-8") as f:
-            label_data = json.load(f) 
-        labels.append(label_data["label"])
-        time_intervals.append(label_data["time_interval"])
-    return ids, labels, time_intervals
 

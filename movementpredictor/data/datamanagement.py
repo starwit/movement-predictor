@@ -84,7 +84,7 @@ class TrackingDataManager:
     border_threshold = None
     start_timestamp = None
 
-    def getTrackedBaseData(self, path, inferencing=True) -> List[TrackedObjectPosition]:
+    def getTrackedBaseData(self, path, inferencing=True, max_frames=None) -> List[TrackedObjectPosition]:
         """
         Read a SAE dump file and extract a flat list of tracked object positions.
 
@@ -98,6 +98,7 @@ class TrackingDataManager:
             path (str): Filesystem path to the `.saedump` file.
             inferencing (bool): If True, applies border-cropping logic to exclude
                 detections too close to the frame edge, and excludes small bounding boxes.
+            max_frames (int or None): If None, the full data is extracted, otherwise only the first max_frames frames are extracted
 
         Returns:
             List[TrackedObjectPosition]: All tracked objects found in the dump, in
@@ -113,7 +114,9 @@ class TrackingDataManager:
                 dump_meta = saedump.DumpMeta.model_validate_json(start_message)
                 log.info(f'Starting playback from file {path} containing streams {dump_meta.recorded_streams}')
                 
-                for message in tqdm(messages):
+                for i, message in tqdm(enumerate(messages)):
+                    if max_frames is not None and i >= max_frames:
+                        break
                     event = saedump.Event.model_validate_json(message)
                     proto_bytes = pybase64.standard_b64decode(event.data_b64)
 

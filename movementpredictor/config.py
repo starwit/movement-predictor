@@ -36,7 +36,14 @@ class ModelConfig:
 
         self.name_data = os.getenv("NAME_DATA")
         self.path_sae_data_train = os.getenv("PATH_SAE_DATA_TRAIN")
-        self.path_sae_data_test = os.getenv("PATH_SAE_DATA_TEST")
+        raw_paths_sae_data_test = os.getenv("PATHS_SAE_DATA_TEST")
+        self.paths_sae_data_test = [p.strip() for p in raw_paths_sae_data_test.split(",") if p.strip()]
+
+        for path_str in self.paths_sae_data_test:
+            p = Path(path_str)
+            if not p.exists():
+                self.log.error("did not find sae-dump: " + str(path_str))
+
         self.path_store_data = os.path.join("movementpredictor/data/datasets", self.camera, self.name_data)
         os.makedirs(self.path_store_data, exist_ok=True)
 

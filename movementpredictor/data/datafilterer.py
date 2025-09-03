@@ -17,12 +17,13 @@ class DataFilterer():
     max_angle_change = 60
 
 
-    def apply_filtering(self, tracking_list: list[TrackedObjectPosition]) -> Dict[str, list[TrackedObjectPosition]]:
+    def apply_filtering(self, tracking_list: list[TrackedObjectPosition], remove_parking_cars=True) -> Dict[str, list[TrackedObjectPosition]]:
         """
         Sort out tracks of vehicles that have not been moving for a certain time and smooth trajectory
 
         Args:
             tracking_list: a list containing single tracks of type TrackedObjectPosition, on which anomaly detection should be performed later
+            remove_parking_cars: if true, removes vehicles that have not been moving for 'time_window_movement' seconds
         
         Returns:
             dict: the adapted tracks are grouped together to trajectories -> key: object id, value: list[TrackedObjectPosition] which is this object's trajectory
@@ -30,7 +31,8 @@ class DataFilterer():
         self.log.info("Start filtering tracks")
 
         mapping = DataFilterer._map_tracks_to_id(tracking_list)
-        mapping = self._extract_vehicles_with_movement(mapping)
+        if remove_parking_cars:
+            mapping = self._extract_vehicles_with_movement(mapping)
         mapping = self._smooth_trajectories_add_movement_info(mapping)
 
         return mapping

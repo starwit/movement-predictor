@@ -36,7 +36,7 @@ def run_inference_and_calc_anomaly_threshold():
     if config.visualize:
         anomaly_detector.visualize_distances(samples_with_stats, config.path_plots)
         anomalies = anomaly_detector.get_unlikely_trajectories(samples_with_stats, score_thr)
-        anomaly_detector.anomalies_with_video(anomalies, config.path_sae_data_test, config.pixel_per_axis, config.path_plots)
+        anomaly_detector.anomalies_with_video(anomalies, config.paths_sae_data_test, config.pixel_per_axis, config.path_plots)
 
     #dist_thr, anomaly_obj_ids = anomaly_detector.calculate_and_visualize_threshold(samples_with_stats, config.path_plots, percentage_p=config.percentage_anomaly)
     #anomalies = anomaly_detector.get_unlikely_samples(samples_with_stats, dist_thr, anomaly_obj_ids)
