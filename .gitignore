@@ -136,6 +136,7 @@ predictions/
 label_box/
 debugging.py
 traffic_anomaly_dataset/
+source/
 *.pth 
 *.json
 anomalies/
