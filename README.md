@@ -26,7 +26,7 @@ Example parameter values are provided in `movementpredictor/.env.template`. To r
 
 1. **Configure**  
    Create a `.env` in the project root (or copy `movementpredictor/.env.template`) and fill in your paths and parameters. In particular, set:
-   - `PATH_SAE_DATA_TRAIN`, `PATH_SAE_DATA_TEST` (SAE-dump files for training & validation)  
+   - `PATH_SAE_DATA_TRAIN`, `PATHS_SAE_DATA_TEST` (SAE-dump files for training & validation)  
    - `TIME_DIFF_PREDICTION` (seconds ahead to predict)  
    - `CAMERA`, `NAME_DATA` (used to name output folders)  
    - `PIXEL_PER_AXIS` (frame resolution)  
@@ -89,6 +89,15 @@ After performing the 3 setup steps the movement predictor anomaly detection is r
   - `model = model_architectures.get_model(architecture="MobileNet_v3", output_prob="asymmetric", path_model="path-to-your-model-weights.pth")`
 - inferencing with `inference_with_stats`
 - extract anomalies with `get_meaningful_unlikely_samples`
+
+## Model Evaluation and Dataset Generation
+
+This repo includes supplementary scripts for model evaluation (`movementpredictor/evaluation/`)
+and for generating the anomaly dataset released on Hugging Face (`movementpredictor/anomalydataset/`).
+
+These scripts were used for the master’s thesis *Anomaly Detection in Traffic Applications:
+A Probabilistic Forecasting Approach Based on Object Tracking* (Hanna Lichtenberg).
+The exact model weights and configs used in the thesis are available here:[OneDrive](https://1drv.ms/f/c/29bd20621baa5af0/En9bfIFXlP5FqIJN5uQKIdkB31psQElUbdLvwUHE5YdH1A?e=XteuXG)
 
 ## Github Workflows and Versioning
 
