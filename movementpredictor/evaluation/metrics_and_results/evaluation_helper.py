@@ -112,43 +112,13 @@ def get_y_true(all_group_labels: List[int], include_mistakes: bool = False) -> L
     else:
         return [group_label for group_label in all_group_labels if group_label != -1]
 
+
 def get_rels(all_group_labels: List[int], include_mistakes: bool = False) -> List[int]:
     return [max(0, anomaly_group) for anomaly_group in get_y_true(all_group_labels, include_mistakes)]    
 
 
-def get_scores_num_trajectories_based(trajectories: List[PredictedTrajectory], num_anomaly_trajectories: int, min_num_anomaly_frames: int, all_ids: List[str], all_group_labels: List[int],
-               weight_length: float = 0.5):
-    scores = []
-    threshold, top_k_ids = calculate_threshold(trajectories, num_anomaly_trajectories, min_num_anomaly_frames)
-    detections: List[PredictedTrajectory] = []
-
-    for trajectory in trajectories:
-        high_measures = [measure for measure in trajectory.measures if measure >= threshold]
-        if len(high_measures) >= min_num_anomaly_frames:
-            detections.append(PredictedTrajectory(trajectory.obj_id, high_measures))
-
-    max_anomal_trajectory_len = max([len(trajectory.measures) for trajectory in detections])
-    max_measure = max([max(trajectory.measures) for trajectory in detections])
-    traj_map = {t.obj_id: t for t in detections}
-
-    for car_id, group_label in zip(all_ids, all_group_labels):
-        if group_label == -1:  # sort out tracking and detection mistakes
-            continue
-
-        if car_id not in traj_map.keys():
-            log.debug("no predictions for " + car_id)
-            scores.append(0)
-
-        else:
-            score = weight_length*(len(traj_map[car_id].measures)/max_anomal_trajectory_len) + (1-weight_length)*(max(traj_map[car_id].measures)/max_measure)
-            scores.append(score)
-    
-    return np.array(scores)
-
-
 def score_trajectory(trajectory: PredictedTrajectory, scoring: str = "weighted-avg", exp_para=None):
     sorted_measures = sorted(trajectory.measures, reverse=True)
-    #sorted_measures = sorted_measures[:min(len(sorted_measures), 50)]
 
     if scoring == "avg":
         score = np.mean(np.array(sorted_measures))
@@ -181,7 +151,6 @@ def score_trajectory(trajectory: PredictedTrajectory, scoring: str = "weighted-a
     return score
 
 
-
 def get_scores_full_trajectory(trajectories: List[PredictedTrajectory], all_ids: List[str], all_group_labels: List[int], scoring: str = "weighted-avg", 
                                exp_para=None, include_mistakes: bool = False):
     scores = []
@@ -207,7 +176,6 @@ def get_scores_full_trajectory(trajectories: List[PredictedTrajectory], all_ids:
     return scores
 
 
-
 def get_scores(trajectories: List[PredictedTrajectory], all_ids: List[str], all_group_labels: List[int], min_num_anomaly_frames: int = None, 
                      portion: float = None, scoring: str = "avg", include_mistakes: bool = False):
     ''' scoring: calculation method for the score - 'avg', 'min', 'weighted-avg' or 'med' '''
@@ -225,12 +193,6 @@ def get_scores(trajectories: List[PredictedTrajectory], all_ids: List[str], all_
         if car_id not in traj_map.keys():
             log.debug("no predictions for " + car_id)
             scores.append(0)
-
-        #elif len(traj_map[car_id].measures) < min_num_anomaly_frames:
-         #   log.debug("not enough predictions for " + car_id + ": " + str(traj_map[car_id].measures))
-          #  if remove_undetected:
-           #     continue
-            #scores.append(0)
 
         else:
             sorted_measures = sorted(traj_map[car_id].measures, reverse=True)
@@ -273,55 +235,6 @@ def get_scores(trajectories: List[PredictedTrajectory], all_ids: List[str], all_
                     sum_weights += weight
                 score = score/sum_weights
 
-            else:
-                log.error("scoring has to be min, avg, weighted-sum or med")
-                exit(1)
-
-            scores.append(score)
-
-
-    rng = np.random.default_rng(seed=42)  
-    noise = rng.normal(loc=0.0, scale=1e-9, size=len(scores))
-    scores = np.array(scores, dtype=np.float64)
-    scores[scores != 0] += noise[scores != 0]
-
-    log.debug(str(len([score for score in scores if score == 0])) + " trajectories could not be detected because there are not enough predictions")
-    return  scores
-
-
-def get_scores_percentile(trajectories: List[PredictedTrajectory], percentile: int, all_ids: List[str], all_group_labels: List[int],
-               scoring: str = "avg"):
-    ''' scoring: calculation method for the score - 'avg', 'min', 'weighted-sum' or 'med' '''
-    scores = []
-    traj_map = {t.obj_id: t for t in trajectories}
-
-
-    for car_id, group_label in zip(all_ids, all_group_labels):
-        if group_label == -1:  # sort out tracking and detection mistakes
-            continue
-
-        if car_id not in traj_map.keys():
-            log.debug("no predictions for " + car_id)
-            scores.append(0)
-
-        else:
-            num_anomaly_frames = int(len(traj_map[car_id].measures)*(100-percentile)/100)
-            if num_anomaly_frames == 0:
-                scores.append(0)
-                continue
-            sorted_measures = sorted(traj_map[car_id].measures, reverse=True)
-
-            if scoring == "min":
-                score = sorted_measures[num_anomaly_frames - 1]
-            elif scoring == "avg":
-                score = np.mean(np.array(sorted_measures[:num_anomaly_frames]))
-            elif scoring == "med":
-                score = np.median(np.array(sorted_measures[:num_anomaly_frames]))
-            elif scoring == "weighted-sum":
-                sorted_measures = np.array(sorted_measures[:num_anomaly_frames])
-                score = 0
-                for rank, measure in enumerate(sorted_measures):
-                    score += measure*(num_anomaly_frames-rank)/num_anomaly_frames
             else:
                 log.error("scoring has to be min, avg, weighted-sum or med")
                 exit(1)

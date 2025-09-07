@@ -29,46 +29,6 @@ class GroupHistogram:
         self.colors = [group_colors[self.value2group[val]] for val in self.x_labels]
         self.group_colors = group_colors
         self.group_annotations = group_annotations
-    
-
-    def log_anomaly_event_counts_per_group(self, path_predictions, model_names):
-        """
-        Logs the counts of found anomaly events per group for each method, along with their standard deviation.
-
-        :param path_predictions: Path to predictions.
-        :param model_names: List of model names to evaluate.
-        """
-        for model_name in model_names:
-            print(f"Processing model: {model_name}")
-            group_counts = {group_id: [] for group_id in self.groups.keys()}
-
-            for num_anomaly_points in [1, 2, 5, 10, 20, 50]:
-                path_list_predictions = find_matching_files_top_k(path_predictions, model_name, num_anomaly_points)
-
-                trajectories = []
-                for path in path_list_predictions:
-                    trajectories.append(get_trajectories(path))
-
-                hists = []
-                for trs in trajectories:
-                    found_labels = np.array([tr.label for tr in trs])
-                    counts = [np.count_nonzero(found_labels == val) for val in self.x_labels]
-                    hists.append(counts)
-                hists = np.array(hists)
-
-                mean_hist = hists.mean(axis=0)
-                std_hist = hists.std(axis=0)
-
-                for group_id, group_values in self.groups.items():
-                    group_indices = [self.x_labels.index(val) for val in group_values if val in self.x_labels]
-                    group_mean = sum(mean_hist[idx] for idx in group_indices)
-                    group_std = sum(std_hist[idx] for idx in group_indices)
-                    group_counts[group_id].append((group_mean, group_std))
-
-            for group_id, counts in group_counts.items():
-                print(f"Group {group_id}:")
-                for idx, ((mean, std), num_anomaly_points) in enumerate(zip(counts, [1, 2, 5, 10, 20, 50])):
-                    print(f"  Anomaly Points: {num_anomaly_points}, Mean: {mean:.2f}, Std Dev: {std:.2f}")
 
 
     def plot_per_method(self, path_predictions, model_name):

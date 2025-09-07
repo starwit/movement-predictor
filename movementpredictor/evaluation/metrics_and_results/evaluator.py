@@ -18,7 +18,6 @@ print("num total detected trajectories: ", str(len([group for group in all_group
 model_names = ["0.5sec_MobileNet_v3_symmetric_prob", "0.5sec_MobileNet_v3_asymmetric_prob", "1sec_MobileNet_v3_symmetric_prob", "1sec_MobileNet_v3_asymmetric_prob",
                "2sec_MobileNet_v3_symmetric_prob", "2sec_MobileNet_v3_asymmetric_prob", "nearest_neighbor_analysis"]
 model_labels = ["SYM0.5", "ASYM0.5", "SYM1", "ASYM1", "SYM2", "ASYM2", "NNC"]
-#model_colors = ["mediumblue", "cornflowerblue", "darkgreen", "limegreen", "darkred", "orangered", "black"]
 model_colors = ["cornflowerblue", "cornflowerblue", "darkgreen", "darkgreen", "orangered", "orangered", "black"]
 
 
@@ -40,7 +39,6 @@ hg.plot_all_found_anomalies(all_event_labels)
 for model_name in model_names:
     hg.plot_per_method(evalconfig.path_store_anomalies, model_name)
 
-#hg.log_anomaly_event_counts_per_group(evalconfig.path_store_anomalies, model_names)
 hg.summary_histogram_pmf_vs_nn(evalconfig.path_store_anomalies, pmf_name="0.5sec_MobileNet_v3_symmetric_prob", label="PMF SYM0.5")
 
 path_store_plot = os.path.join("movementpredictor/evaluation/plots", evalconfig.camera)
@@ -58,7 +56,7 @@ for i, model_name in enumerate(model_names):
 
     max_dcg, max_std, argmax = ndcg.ndcg_curve_initial_scoring(
         tra_runs, all_ids, all_group_labels, k=50,
-        label=model_labels[i], color=model_colors[i], ax=ax, include_mistakes=True
+        label=model_labels[i], color=model_colors[i], ax=ax, include_mistakes=False
     )
     print(f"{model_name} - score^(k): \tMax NDCG Score at {argmax} : {max_dcg} (std: {max_std})\n")
 
@@ -77,7 +75,7 @@ for ax, scoring in zip(axes, scorings):
         tra_runs = _load_trajectories_for_model(model_name)
         max_dcg, max_std, argmax = ndcg.ndcg_curve_topk(
             tra_runs, all_ids, all_group_labels,
-            scoring=scoring, k=50, label=model_labels[i], color=model_colors[i], ax=ax, include_mistakes=True
+            scoring=scoring, k=50, label=model_labels[i], color=model_colors[i], ax=ax, include_mistakes=False
         )
         print(f"{model_name} - {scoring}: \tMax NDCG Score at {argmax} : {max_dcg} (std: {max_std})")
 
@@ -117,7 +115,7 @@ fig, ax = plt.subplots(figsize=(6, 3.5))
 for i, model_name in enumerate(model_names[:-1]):  # Exclude NNC if desired
     tra_runs = _load_trajectories_for_model(model_name)
     max_dcg, max_std, best_a = ndcg.ndcg_curve_exp_weighted_avg(
-        tra_runs, all_ids, all_group_labels, k=50, label=model_labels[i], color=model_colors[i], ax=ax, include_mistakes=True
+        tra_runs, all_ids, all_group_labels, k=50, label=model_labels[i], color=model_colors[i], ax=ax, include_mistakes=False
     )
     print(f"{model_name} - exp-weighted-avg: \tMax NDCG Score with a={round(best_a, 2)} : {max_dcg} (std: {max_std})")
 
@@ -148,9 +146,6 @@ for ax, num_tr in zip(axes, num_trajectories):
     )
     ax.set_title(f"Top {num_tr} anomaly candidates")
 
-# one shared legend on the right
-#handles, labels = axes[-1].get_legend_handles_labels()
-#fig.legend(handles, labels, loc='center left', bbox_to_anchor=(1.02, 0.5), title='Relevance')
 
 plt.tight_layout()
 plt.subplots_adjust(wspace=wspace, right=0.86)  # room for legend
@@ -322,41 +317,5 @@ plt.close(fig)
 exit(0)
 
 
-#for event_of_interest in [22, 18, 11, 12, 16]:
-good_classes = [2, 3, 4]
-fig, axes = plt.subplots(1, 3, figsize=(16, 3.5), sharey=True)
-wspace = 0.1
-
-for ax, good_class_start in zip(axes, good_classes):
-    for i, (model_name, weight_param) in enumerate(zip(model_names, best_params_per_method[-1])):
-        path_list_predictions = evaluation_helper.find_matching_files(evalconfig.path_store_anomalies, model_name)
-
-        trajectories_of_all_runs = []
-        for path in path_list_predictions:
-            trajectories_of_all_runs.append(evaluation_helper.get_trajectories(path))
-
-        precision_recall_f1.mean_and_variance_PR_curve(trajectories_of_all_runs, model_name, good_class_start, weight_param, 
-                                all_ids, all_group_labels, scoring="exp-weighted-avg", show=i==len(model_names)-1)
-        auc, std_auc = precision_recall_f1.PR_AUC(trajectories_of_all_runs, good_class_start, weight_param, 
-                                all_ids, all_group_labels, scoring="exp-weighted-avg")
-        print(model_name + " - positives starting at class ", good_class_start, ": \tAUC PR = ", auc, " (std: ", std_auc, ")")
-print()
-
-for scoring in ["min-exc", "avg"]:
-    for start_class in [1, 2, 3, 4]:
-        plt.figure(figsize=(10, 6))
-
-        for i, model_name in enumerate(model_names):
-            path_list_predictions = evaluation_helper.find_matching_files(evalconfig.path_store_anomalies, model_name)
-
-            trajectories_of_all_runs = []
-            for path in path_list_predictions:
-                trajectories_of_all_runs.append(evaluation_helper.get_trajectories(path))
-
-            max_f1, max_f1_std, threshold, threshold_std, min_anomaly_frames = precision_recall_f1.best_F1_scores_plot(trajectories_of_all_runs, model_name, start_class, all_ids, all_group_labels, 
-                                                                               scoring=scoring, show=i==len(model_names)-1)
-
-            print(model_name, " - ", start_class, " - " , scoring)
-            print("Max F1 Score at threshold ", round(threshold, 3), " (+/-", round(threshold_std, 3), ") with mind. ", min_anomaly_frames, " frames: ", round(max_f1, 3), " (+/-", round(max_f1_std, 3), ")\n")
 
 
