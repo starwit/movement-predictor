@@ -93,7 +93,7 @@ After performing the 3 setup steps the movement predictor anomaly detection is r
 ## Model Evaluation and Dataset Generation
 
 This repo includes supplementary scripts for model evaluation (`movementpredictor/evaluation/`)
-and for generating the anomaly dataset released on Hugging Face - LINK ADDED SOON (`movementpredictor/anomalydataset/`).
+and for generating the anomaly dataset released on [Hugging Face](https://huggingface.co/datasets/starwit/overhead-traffic-anomalies) (`movementpredictor/anomalydataset/`).
 
 These scripts were used for the master’s thesis *Anomaly Detection in Traffic Applications:
 A Probabilistic Forecasting Approach Based on Object Tracking* (Hanna Lichtenberg).
